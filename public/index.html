@@ -15,7 +15,18 @@
     font-family: 'Sarabun', 'TH Sarabun New', 'Noto Sans Thai', system-ui, sans-serif;
     font-size: 15px; line-height: 1.55;
   }
-  .wrap { max-width: 900px; margin: 0 auto; padding: 16px; }
+  .wrap { max-width: 1240px; margin: 0 auto; padding: 16px; }
+  /* แท็บบริษัท/ประวัติ เป็นคอลัมน์เดียว ไม่ต้องกว้างเท่าหน้าออกใบ */
+  #tab-companies, #tab-history { max-width: 900px; }
+
+  /* ออกใบ: ซ้าย = กรอกข้อมูล / ขวา = ตัวอย่างเอกสาร */
+  .split { display: grid; grid-template-columns: 420px minmax(0, 1fr); gap: 18px; align-items: start; }
+  .pane-right { position: sticky; top: 16px; max-height: calc(100vh - 32px); overflow: auto; }
+  .pane-left .grid { grid-template-columns: 1fr; }   /* ฟอร์มในรางแคบ ใช้คอลัมน์เดียว */
+  @media (max-width: 1000px) {
+    .split { grid-template-columns: 1fr; }
+    .pane-right { position: static; max-height: none; overflow: visible; }
+  }
   h1 { font-size: 19px; margin: 0 0 12px; }
   h2 { font-size: 16px; margin: 20px 0 8px; }
 
@@ -67,9 +78,13 @@
   .muted { color: var(--muted); font-size: 13px; }
 
   /* ---------- ตัวเอกสาร ---------- */
+  /* ตัวอย่างบนจอเป็น A4 ขนาดจริง แล้วย่อด้วย transform ให้พอดีราง
+     -> layout คำนวณที่ขนาดกระดาษจริง เห็นบนจออย่างไร พิมพ์ออกมาอย่างนั้น */
+  #paper { overflow: hidden; }
   .doc {
     background: #fff; color: #000; border: 1px solid var(--line);
-    padding: 15mm; margin: 0 auto; max-width: 210mm; line-height: 1.75;
+    padding: 15mm; width: 210mm; min-height: 297mm; line-height: 1.75;
+    transform-origin: top left;
   }
   .doc h3 { text-align: center; font-size: 20px; margin: 0 0 14px; }
   .doc .row { display: flex; justify-content: space-between; gap: 16px; align-items: flex-start; }
@@ -94,7 +109,16 @@
     .no-print { display: none !important; }
     .wrap { max-width: none; padding: 0; }
     #tab-new { display: block !important; }
-    .doc { border: 0; padding: 0; max-width: none; margin: 0; }
+    .split { display: block !important; }
+    .pane-right { position: static !important; max-height: none !important; overflow: visible !important; }
+    /* @page margin 15mm ทำหน้าที่เป็นขอบกระดาษแทน padding ของ .doc
+       กว้างสุทธิ 210-30 = 180mm เท่ากับ content box บนจอเป๊ะ */
+    #paper { overflow: visible !important; height: auto !important; }
+    .doc {
+      border: 0; margin: 0; padding: 0 !important;
+      width: auto !important; min-height: 0 !important;
+      transform: none !important;
+    }
   }
 </style>
 </head>
@@ -112,7 +136,9 @@
   <section id="tab-new" class="tab on">
     <div id="new-msg" class="no-print"></div>
 
-    <div class="card no-print">
+    <div class="split">
+    <div class="pane-left no-print">
+    <div class="card">
       <fieldset id="form">
         <div class="grid">
           <div>
@@ -126,7 +152,12 @@
           </div>
 
           <div>
-            <label for="f-payer">ข้าพเจ้า (ผู้จ่ายเงิน)</label>
+            <label for="f-docno">เลขที่เอกสาร</label>
+            <input id="f-docno" placeholder="ระบบออกเลขให้อัตโนมัติ (INS-2569/0001)" autocomplete="off">
+          </div>
+
+          <div>
+            <label for="f-payer">ข้าพเจ้า (ผู้เบิกจ่าย)</label>
             <input id="f-payer" list="dl-payer" autocomplete="off">
             <datalist id="dl-payer"></datalist>
           </div>
@@ -151,11 +182,17 @@
             <input id="f-payee-address" list="dl-payee-address" autocomplete="off">
             <datalist id="dl-payee-address"></datalist>
           </div>
+
+          <div class="full">
+            <label for="f-approver">ผู้อนุมัติ (เว้นว่างไว้เซ็นสดบนกระดาษได้)</label>
+            <input id="f-approver" list="dl-approver" autocomplete="off">
+            <datalist id="dl-approver"></datalist>
+          </div>
         </div>
 
         <h2>รายการที่จ่าย</h2>
         <table>
-          <thead><tr><th>รายการ</th><th style="width:150px">จำนวนเงิน (บาท)</th><th style="width:44px"></th></tr></thead>
+          <thead><tr><th>รายการ</th><th style="width:120px">จำนวนเงิน (บาท)</th><th style="width:44px"></th></tr></thead>
           <tbody id="items"></tbody>
         </table>
         <div class="actions">
@@ -169,13 +206,20 @@
       </fieldset>
     </div>
 
-    <div id="doc" class="doc"></div>
-
-    <div class="actions no-print">
+    <div class="actions">
       <button class="btn primary" id="save">บันทึกและพิมพ์</button>
+      <button class="btn primary" id="update" hidden>บันทึกการแก้ไข</button>
+      <button class="btn" id="edit" hidden>แก้ไขใบนี้</button>
+      <button class="btn" id="cancel-edit" hidden>ยกเลิกการแก้ไข</button>
       <button class="btn" id="print">พิมพ์</button>
       <button class="btn" id="reset">เริ่มใบใหม่</button>
     </div>
+    </div><!-- /pane-left -->
+
+    <div class="pane-right">
+      <div id="paper"><div id="doc" class="doc"></div></div>
+    </div>
+    </div><!-- /split -->
   </section>
 
   <!-- ============ บริษัท ============ -->
@@ -184,6 +228,9 @@
     <div class="card">
       <h2 style="margin-top:0" id="co-form-title">เพิ่มบริษัท</h2>
       <div class="grid">
+        <div><label for="c-code">รหัสบริษัท * (นำหน้าเลขที่เอกสาร)</label>
+          <input id="c-code" maxlength="10" placeholder="INS" autocomplete="off"
+                 style="text-transform:uppercase"></div>
         <div><label for="c-name">ชื่อบริษัท *</label><input id="c-name"></div>
         <div><label for="c-branch">สาขา</label><input id="c-branch" placeholder="สำนักงานใหญ่"></div>
         <div class="full"><label for="c-address">ที่อยู่</label><input id="c-address"></div>
@@ -199,7 +246,7 @@
       <label for="c-search">ค้นหาบริษัท</label>
       <input id="c-search" placeholder="พิมพ์ชื่อบริษัท…">
       <table style="margin-top:12px">
-        <thead><tr><th>ชื่อ</th><th>สาขา</th><th>เลขผู้เสียภาษี</th><th style="width:120px"></th></tr></thead>
+        <thead><tr><th style="width:80px">รหัส</th><th>ชื่อ</th><th>สาขา</th><th>เลขผู้เสียภาษี</th><th style="width:120px"></th></tr></thead>
         <tbody id="co-list"></tbody>
       </table>
     </div>
@@ -218,7 +265,7 @@
     </div>
     <div class="card">
       <table>
-        <thead><tr><th>เลขที่</th><th>วันที่</th><th>บริษัท</th><th>ผู้รับเงิน</th><th class="num">จำนวนเงิน</th><th style="width:80px"></th></tr></thead>
+        <thead><tr><th>เลขที่</th><th>วันที่</th><th>บริษัท</th><th>ผู้รับเงิน</th><th class="num">จำนวนเงิน</th><th style="width:150px"></th></tr></thead>
         <tbody id="h-list"></tbody>
       </table>
       <p class="muted" id="h-empty" hidden>ไม่พบข้อมูล</p>
@@ -265,13 +312,14 @@ function flash(el, text, kind) {
   if (text) el.scrollIntoView({ block: 'nearest' });
 }
 
-const state = { companies: [], saved: null, editingCompany: null };
+const state = { companies: [], saved: null, editing: false, editingCompany: null };
 
 /* ---------------- แท็บ ---------------- */
 document.querySelectorAll('.tabs button').forEach((b) => {
   b.onclick = () => {
     document.querySelectorAll('.tabs button').forEach((x) => x.classList.toggle('on', x === b));
     document.querySelectorAll('.tab').forEach((t) => t.classList.toggle('on', t.id === 'tab-' + b.dataset.tab));
+    if (b.dataset.tab === 'new') fitDoc();
     if (b.dataset.tab === 'companies') loadCompanyList();
     if (b.dataset.tab === 'history') loadHistory();
   };
@@ -306,16 +354,24 @@ function readItems() {
 }
 
 /* ---------------- เก็บค่าจากฟอร์ม -> ทรงเดียวกับ row ใน DB ---------------- */
+// คืนข้อมูลบริษัทสำหรับใบนี้ — ถ้าชื่อตรงกับบริษัทที่ยัง active ใช้ข้อมูลล่าสุด
+// ถ้าไม่ตรง แต่ตรงกับ snapshot ในใบที่กำลังเปิดอยู่ (บริษัทถูกลบไปแล้ว) ใช้ snapshot เดิม
 function currentCompany() {
   const name = $('#f-company').value.trim();
-  return state.companies.find((c) => c.name === name) || null;
+  const active = state.companies.find((c) => c.name === name);
+  if (active) return active;
+  const s = state.saved;
+  if (s && name && name === s.company_name)
+    return { id: s.company_id, name: s.company_name, branch: s.company_branch,
+             address: s.company_address, tax_id: s.company_tax_id };
+  return null;
 }
 
 function collect() {
   const co = currentCompany();
   const items = readItems();
   return {
-    doc_no: state.saved ? state.saved.doc_no : '',
+    doc_no: $('#f-docno').value.trim() || (state.saved ? state.saved.doc_no : ''),
     company_id: co ? co.id : 0,
     company_name: co ? co.name : $('#f-company').value.trim(),
     company_branch: co ? co.branch : '',
@@ -327,6 +383,7 @@ function collect() {
     payee_name: $('#f-payee').value.trim(),
     payee_address: $('#f-payee-address').value.trim(),
     payee_idcard: $('#f-idcard').value.trim(),
+    approver_name: $('#f-approver').value.trim(),
     note: $('#f-note').value.trim(),
     items: items,
     total_satang: items.reduce((s, it) => s + (Number.isFinite(it.amount_satang) ? it.amount_satang : 0), 0),
@@ -361,7 +418,7 @@ function renderDoc(data) {
       'และไม่อาจเรียกใบเสร็จรับเงินจากผู้รับเงินได้</p>' +
     '<p>จ่ายให้ (ผู้รับเงิน) <span class="fill">' + esc(d.payee_name) + '</span> ' +
       'เลขบัตรประชาชน <span class="fill">' + esc(d.payee_idcard) + '</span></p>' +
-    '<p>ที่อยู่ <span class="fill" style="min-width:400px">' + esc(d.payee_address) + '</span></p>' +
+    '<p>ที่อยู่ <span class="fill" style="min-width:50%">' + esc(d.payee_address) + '</span></p>' +
 
     '<table><thead><tr><th style="width:40px">ที่</th><th>รายการ</th><th class="amt">จำนวนเงิน</th></tr></thead><tbody>' +
       rows.map((it, i) =>
@@ -376,32 +433,63 @@ function renderDoc(data) {
     (d.note ? '<p>หมายเหตุ: ' + esc(d.note) + '</p>' : '') +
 
     '<div class="signs">' +
-      '<div><div class="sigline"></div>ผู้จ่ายเงิน<br>(' + (esc(d.payer_name) || '&nbsp;') + ')</div>' +
-      '<div><div class="sigline"></div>ผู้อนุมัติ<br>(&nbsp;)</div>' +
+      '<div><div class="sigline"></div>ผู้เบิกจ่าย<br>(' + (esc(d.payer_name) || '&nbsp;') + ')</div>' +
+      '<div><div class="sigline"></div>ผู้อนุมัติ<br>(' + (esc(d.approver_name) || '&nbsp;') + ')</div>' +
     '</div>';
+
+  fitDoc();
 }
 
+// ย่อกระดาษ A4 ให้พอดีความกว้างรางขวา (layout ไม่เปลี่ยน แค่ย่อภาพ)
+function fitDoc() {
+  const paper = $('#paper'), doc = $('#doc');
+  if (!paper || !doc) return;
+  doc.style.transform = 'none';
+  const w = doc.offsetWidth, h = doc.offsetHeight;
+  if (!w) return;
+  const scale = Math.min(1, paper.clientWidth / w);
+  doc.style.transform = 'scale(' + scale + ')';
+  paper.style.height = Math.ceil(h * scale) + 'px';
+}
+window.addEventListener('resize', fitDoc);
+
 /* ---------------- ฟอร์ม: โหลด / ล้าง / ล็อก ---------------- */
-function setSaved(row) {
-  state.saved = row;
-  $('#form').disabled = !!row;
+const fmtStamp = (iso) => { try { return new Date(iso).toLocaleString('th-TH'); } catch (e) { return iso; } };
+
+// 3 โหมด: ออกใบใหม่ (row=null) / ดูใบเดิม (locked) / แก้ไขใบเดิม
+function setMode(row, editing) {
+  state.saved = row || null;
+  state.editing = !!(row && editing);
+  const locked = !!row && !state.editing;
+  $('#form').disabled = locked;
+  $('#add-item').disabled = locked;
+  // ออกใบใหม่ = ระบบออกเลขให้ / เปิดดู = ล็อก / แก้ไข = พิมพ์เลขเองได้
+  $('#f-docno').value = row ? row.doc_no : '';
+  $('#f-docno').disabled = !state.editing;
   $('#save').hidden = !!row;
-  $('#add-item').disabled = !!row;
-  flash($('#new-msg'), row ? 'บันทึกแล้ว เลขที่ ' + row.doc_no : '', 'ok');
+  $('#update').hidden = !state.editing;
+  $('#edit').hidden = !(row && !state.editing);
+  $('#cancel-edit').hidden = !state.editing;
+
+  if (state.editing) flash($('#new-msg'), 'กำลังแก้ไขใบเลขที่ ' + row.doc_no + ' — เลขที่และปี พ.ศ. จะไม่เปลี่ยน', 'ok');
+  else if (row) flash($('#new-msg'), 'ใบเลขที่ ' + row.doc_no +
+    (row.updated_at ? ' · แก้ไขล่าสุด ' + fmtStamp(row.updated_at) : ''), 'ok');
+  else flash($('#new-msg'), '', 'ok');
 }
 
 function resetForm() {
-  ['#f-company','#f-payer','#f-position','#f-payee','#f-payee-address','#f-idcard','#f-note']
+  ['#f-company','#f-payer','#f-position','#f-payee','#f-payee-address','#f-idcard','#f-approver','#f-note','#f-docno']
     .forEach((s) => { $(s).value = ''; });
   $('#f-date').value = new Date().toISOString().slice(0, 10);
   $('#items').innerHTML = '';
   addItemRow(); addItemRow();
-  setSaved(null);
+  setMode(null, false);
   renderDoc();
 }
 
-function loadCertificate(row) {
+function loadCertificate(row, editing) {
   const items = JSON.parse(row.items_json || '[]');
+  $('#f-docno').value = row.doc_no || '';
   $('#f-company').value = row.company_name || '';
   $('#f-date').value = row.doc_date || '';
   $('#f-payer').value = row.payer_name || '';
@@ -409,18 +497,19 @@ function loadCertificate(row) {
   $('#f-payee').value = row.payee_name || '';
   $('#f-payee-address').value = row.payee_address || '';
   $('#f-idcard').value = row.payee_idcard || '';
+  $('#f-approver').value = row.approver_name || '';
   $('#f-note').value = row.note || '';
   $('#items').innerHTML = '';
   items.forEach((it) => addItemRow(it.desc, (it.amount_satang / 100).toFixed(2)));
-  setSaved(row);
+  setMode(row, editing);
+  goTab('new');
   // ใช้ snapshot จาก row เสมอ ไม่ไปอ่านตาราง companies (ที่อยู่บริษัทอาจถูกแก้ไปแล้ว)
   renderDoc({ ...row, items });
-  goTab('new');
 }
 
 // วาดใหม่ทุกครั้งที่พิมพ์ (ยกเว้นตอนล็อกอยู่ ซึ่งวาดจาก snapshot ไปแล้ว)
 document.addEventListener('input', (e) => {
-  if (state.saved) return;
+  if (state.saved && !state.editing) return;
   if (e.target.closest('#form')) renderDoc();
 });
 
@@ -428,49 +517,65 @@ document.addEventListener('input', (e) => {
 $('#print').onclick = () => window.print();
 $('#reset').onclick = resetForm;
 
-$('#save').onclick = async () => {
+// ตรวจฟอร์มแล้วสร้าง payload ใช้ร่วมกันทั้งตอนออกใบใหม่และตอนบันทึกการแก้ไข
+function buildPayload() {
   const d = collect();
   const co = currentCompany();
-  if (!co) return flash($('#new-msg'), 'กรุณาเลือกบริษัทจากรายการ', 'err');
-  if (!d.payer_name) return flash($('#new-msg'), 'กรุณากรอกชื่อผู้จ่ายเงิน', 'err');
-  if (!d.payee_name) return flash($('#new-msg'), 'กรุณากรอกชื่อผู้รับเงิน', 'err');
+  if (!co) return { error: 'กรุณาเลือกบริษัทจากรายการ' };
+  if (!d.payer_name) return { error: 'กรุณากรอกชื่อผู้เบิกจ่าย' };
+  if (!d.payee_name) return { error: 'กรุณากรอกชื่อผู้รับเงิน' };
   const items = readItems();
-  if (!items.length) return flash($('#new-msg'), 'กรุณาเพิ่มรายการอย่างน้อย 1 รายการ', 'err');
+  if (!items.length) return { error: 'กรุณาเพิ่มรายการอย่างน้อย 1 รายการ' };
   for (const it of items) {
-    if (!it.desc) return flash($('#new-msg'), 'มีรายการที่ยังไม่ได้ใส่ชื่อ', 'err');
+    if (!it.desc) return { error: 'มีรายการที่ยังไม่ได้ใส่ชื่อ' };
     if (!Number.isInteger(it.amount_satang) || it.amount_satang <= 0)
-      return flash($('#new-msg'), 'จำนวนเงินของ "' + it.desc + '" ไม่ถูกต้อง', 'err');
+      return { error: 'จำนวนเงินของ "' + it.desc + '" ไม่ถูกต้อง' };
   }
+  const body = {
+    company_id: co.id,
+    doc_date: d.doc_date,
+    payer_name: d.payer_name, payer_position: d.payer_position,
+    payee_name: d.payee_name, payee_address: d.payee_address, payee_idcard: d.payee_idcard,
+    approver_name: d.approver_name,
+    note: d.note,
+    items: items.map((it) => ({ desc: it.desc, amount_satang: it.amount_satang })),
+  };
+  if (state.editing) body.doc_no = $('#f-docno').value.trim();
+  return { body };
+}
 
-  $('#save').disabled = true;
+async function submitForm(path, method, btn, thenPrint) {
+  const p = buildPayload();
+  if (p.error) return flash($('#new-msg'), p.error, 'err');
+  btn.disabled = true;
   try {
-    const row = await api('certificates', {
-      method: 'POST',
-      body: {
-        company_id: co.id,
-        doc_date: d.doc_date,
-        payer_name: d.payer_name, payer_position: d.payer_position,
-        payee_name: d.payee_name, payee_address: d.payee_address, payee_idcard: d.payee_idcard,
-        note: d.note,
-        items: items.map((it) => ({ desc: it.desc, amount_satang: it.amount_satang })),
-      },
-    });
-    setSaved(row);
+    const row = await api(path, { method, body: p.body });
+    setMode(row, false);
     renderDoc({ ...row, items: JSON.parse(row.items_json) });
     loadNameLists();
-    window.print();
+    if (thenPrint) window.print();
   } catch (e) {
     flash($('#new-msg'), e.message, 'err');
   } finally {
-    $('#save').disabled = false;
+    btn.disabled = false;
   }
+}
+
+$('#save').onclick = () => submitForm('certificates', 'POST', $('#save'), true);
+$('#update').onclick = () => submitForm('certificates/' + state.saved.id, 'PUT', $('#update'), false);
+$('#edit').onclick = () => setMode(state.saved, true);
+
+// ยกเลิก = ดึงของเดิมจาก server มาทับ ทิ้งสิ่งที่แก้ค้างไว้
+$('#cancel-edit').onclick = async () => {
+  loadCertificate(await api('certificates/' + state.saved.id), false);
 };
 
 /* ---------------- บริษัท ---------------- */
 async function loadCompanies() {
   state.companies = await api('companies');
   $('#dl-companies').innerHTML = state.companies
-    .map((c) => '<option value="' + esc(c.name) + '">' + esc([c.branch, c.tax_id].filter(Boolean).join(' · ')) + '</option>')
+    .map((c) => '<option value="' + esc(c.name) + '">' +
+                esc([c.code, c.branch, c.tax_id].filter(Boolean).join(' · ')) + '</option>')
     .join('');
   $('#h-company').innerHTML = '<option value="">— ทุกบริษัท —</option>' +
     state.companies.map((c) => '<option value="' + c.id + '">' + esc(c.name) + '</option>').join('');
@@ -479,15 +584,16 @@ async function loadCompanies() {
 async function loadCompanyList() {
   const list = await api('companies?q=' + encodeURIComponent($('#c-search').value.trim()));
   $('#co-list').innerHTML = list.map((c) =>
-    '<tr><td>' + esc(c.name) + '</td><td>' + esc(c.branch) + '</td><td>' + esc(c.tax_id) + '</td>' +
+    '<tr><td><b>' + esc(c.code) + '</b></td><td>' + esc(c.name) + '</td><td>' + esc(c.branch) + '</td><td>' + esc(c.tax_id) + '</td>' +
     '<td><button class="btn" data-edit="' + c.id + '">แก้ไข</button> ' +
         '<button class="btn danger" data-del="' + c.id + '">ลบ</button></td></tr>'
-  ).join('') || '<tr><td colspan="4" class="muted">ยังไม่มีบริษัท</td></tr>';
+  ).join('') || '<tr><td colspan="5" class="muted">ยังไม่มีบริษัท</td></tr>';
 
   $('#co-list').querySelectorAll('[data-edit]').forEach((b) => {
     b.onclick = () => {
       const c = list.find((x) => x.id === +b.dataset.edit);
       state.editingCompany = c.id;
+      $('#c-code').value = c.code || '';
       $('#c-name').value = c.name || ''; $('#c-branch').value = c.branch || '';
       $('#c-address').value = c.address || ''; $('#c-tax').value = c.tax_id || '';
       $('#co-form-title').textContent = 'แก้ไขบริษัท: ' + c.name;
@@ -515,17 +621,21 @@ $('#c-search').oninput = loadCompanyList;
 
 $('#c-cancel').onclick = () => {
   state.editingCompany = null;
-  ['#c-name','#c-branch','#c-address','#c-tax'].forEach((s) => { $(s).value = ''; });
+  ['#c-code','#c-name','#c-branch','#c-address','#c-tax'].forEach((s) => { $(s).value = ''; });
   $('#co-form-title').textContent = 'เพิ่มบริษัท';
   $('#c-cancel').hidden = true;
 };
 
 $('#c-save').onclick = async () => {
   const body = {
+    code: $('#c-code').value.trim().toUpperCase(),
     name: $('#c-name').value.trim(), branch: $('#c-branch').value.trim(),
     address: $('#c-address').value.trim(), tax_id: $('#c-tax').value.trim(),
   };
   if (!body.name) return flash($('#co-msg'), 'กรุณากรอกชื่อบริษัท', 'err');
+  // ตรวจฝั่ง client ด้วย จะได้ไม่ต้องรอ round trip (server ตรวจซ้ำอยู่แล้ว)
+  if (!/^[A-Z0-9]{2,10}$/.test(body.code))
+    return flash($('#co-msg'), 'รหัสบริษัทต้องเป็นตัวอักษรอังกฤษหรือตัวเลข 2-10 ตัว (เช่น INS)', 'err');
   try {
     const editing = state.editingCompany;
     await api(editing ? 'companies/' + editing : 'companies', { method: editing ? 'PUT' : 'POST', body });
@@ -539,7 +649,8 @@ $('#c-save').onclick = async () => {
 
 /* ---------------- autocomplete ชื่อ ---------------- */
 async function loadNameLists() {
-  const fields = [['payer','#dl-payer'], ['position','#dl-position'], ['payee','#dl-payee'], ['payee_address','#dl-payee-address']];
+  const fields = [['payer','#dl-payer'], ['position','#dl-position'], ['payee','#dl-payee'],
+                  ['payee_address','#dl-payee-address'], ['approver','#dl-approver']];
   await Promise.all(fields.map(async ([f, sel]) => {
     try {
       const vals = await api('names?field=' + f);
@@ -562,21 +673,30 @@ async function loadHistory() {
   $('#h-list').innerHTML = list.map((r) => {
     const dt = thaiDate(r.doc_date);
     return '<tr class="click" data-id="' + r.id + '">' +
-      '<td>' + esc(r.doc_no) + '</td>' +
+      '<td>' + esc(r.doc_no) +
+        (r.updated_at ? ' <span class="muted" title="แก้ไขล่าสุด ' + esc(fmtStamp(r.updated_at)) + '">✎</span>' : '') +
+      '</td>' +
       '<td>' + (dt ? dt.d + ' ' + dt.month + ' ' + dt.year : '') + '</td>' +
       '<td>' + esc(r.company_name) + '</td>' +
       '<td>' + esc(r.payee_name) + '</td>' +
       '<td class="num">' + money(r.total_satang) + '</td>' +
-      '<td><button class="btn" data-open="' + r.id + '">เปิด/พิมพ์</button></td></tr>';
+      '<td><button class="btn" data-open="' + r.id + '">เปิด</button> ' +
+          '<button class="btn" data-edit-cert="' + r.id + '">แก้ไข</button></td></tr>';
   }).join('');
   $('#h-list').querySelectorAll('[data-open]').forEach((b) => {
     b.onclick = async (ev) => {
       ev.stopPropagation();
-      loadCertificate(await api('certificates/' + b.dataset.open));
+      loadCertificate(await api('certificates/' + b.dataset.open), false);
+    };
+  });
+  $('#h-list').querySelectorAll('[data-edit-cert]').forEach((b) => {
+    b.onclick = async (ev) => {
+      ev.stopPropagation();
+      loadCertificate(await api('certificates/' + b.dataset.editCert), true);
     };
   });
   $('#h-list').querySelectorAll('tr.click').forEach((tr) => {
-    tr.onclick = async () => loadCertificate(await api('certificates/' + tr.dataset.id));
+    tr.onclick = async () => loadCertificate(await api('certificates/' + tr.dataset.id), false);
   });
 }
 ['#h-q','#h-company','#h-from','#h-to'].forEach((s) => {
