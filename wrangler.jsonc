@@ -1,31 +1,31 @@
 {
-  "$schema": "node_modules/wrangler/config-schema.json",
-  "name": "receipt-cert",
-  "main": "src/index.js",
-  "compatibility_date": "2025-09-01",
-
-  // ปิดทุก URL ที่ลงท้าย .workers.dev เพราะ Cloudflare Access ผูกกับ hostname ใน routes
-  // เท่านั้น ครอบ workers.dev ไม่ได้ ถ้าเปิดไว้จะมีทางเข้าแอปที่ไม่ผ่าน login
-  "workers_dev": false,
-  "preview_urls": false,  // <version>-receipt-cert.<subdomain>.workers.dev ก็ต้องปิดด้วย
-
-  // TODO: เปลี่ยนเป็น subdomain จริงของคุณ แล้วไปตั้ง Access ครอบ hostname นี้
-  // (Zero Trust > Access > Applications > Self-hosted)
-  "routes": [
-    { "pattern": "receipt.example.com", "custom_domain": true }
-  ],
-
-  "assets": {
-    "directory": "./public",
-    "binding": "ASSETS"
-  },
-
-  // TODO: รัน `npx wrangler d1 create receipt-db` แล้วเอา database_id มาใส่
-  "d1_databases": [
-    {
-      "binding": "DB",
-      "database_name": "receipt-db",
-      "database_id": "PUT_DATABASE_ID_HERE"
-    }
-  ]
+	"$schema": "node_modules/wrangler/config-schema.json",
+	"name": "receipt-cert",
+	"main": "src/index.js",
+	"compatibility_date": "2025-09-01",
+	// ปิดทุก URL ที่ลงท้าย .workers.dev เพราะ Cloudflare Access ผูกกับ hostname ใน routes
+	// เท่านั้น ครอบ workers.dev ไม่ได้ ถ้าเปิดไว้จะมีทางเข้าแอปที่ไม่ผ่าน login
+	"workers_dev": false,
+	"preview_urls": false, // <version>-receipt-cert.<subdomain>.workers.dev ก็ต้องปิดด้วย
+	// ⚠️ ต้องตั้ง Cloudflare Access ครอบ hostname นี้
+	// (Zero Trust > Access > Applications > Self-hosted)
+	"routes": [
+		{
+			"pattern": "receipt.altitech.co.th",
+			"custom_domain": true
+		}
+	],
+	"assets": {
+		"directory": "./public",
+		"binding": "ASSETS"
+	},
+	// binding ชื่อ DB เท่านั้น -- src/index.js ใช้ env.DB
+	// ไม่ใส่ "remote": true เพื่อให้ `npm run dev` ใช้ฐานข้อมูลในเครื่อง ไม่แตะ production
+	"d1_databases": [
+		{
+			"binding": "DB",
+			"database_name": "receipt-db",
+			"database_id": "60ecefcf-12f7-4208-9987-f885469ea349"
+		}
+	]
 }
