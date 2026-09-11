@@ -1,0 +1,37 @@
+<!doctype html>
+<meta charset="utf-8">
+<title>test bahtText()</title>
+<style>
+  body { font: 15px/1.6 ui-monospace, Menlo, monospace; padding: 24px; }
+  .pass { color: #0a7f3f; } .fail { color: #c0242b; font-weight: 700; }
+  h1 { font-size: 18px; }
+</style>
+<h1>bahtText() — self check</h1>
+<div id="out"></div>
+<script src="baht.js"></script>
+<script>
+  var CASES = [
+    [100, 'หนึ่งบาทถ้วน'],
+    [1100, 'สิบเอ็ดบาทถ้วน'],
+    [2100, 'ยี่สิบเอ็ดบาทถ้วน'],
+    [10100, 'หนึ่งร้อยเอ็ดบาทถ้วน'],
+    [100000000, 'หนึ่งล้านบาทถ้วน'],
+    [100000100, 'หนึ่งล้านเอ็ดบาทถ้วน'],
+    [12345678900, 'หนึ่งร้อยยี่สิบสามล้านสี่แสนห้าหมื่นหกพันเจ็ดร้อยแปดสิบเก้าบาทถ้วน'],
+    [120050, 'หนึ่งพันสองร้อยบาทห้าสิบสตางค์'],
+    [0, 'ศูนย์บาทถ้วน']
+  ];
+  var out = document.getElementById('out'), failed = 0;
+  CASES.forEach(function (c) {
+    var got = bahtText(c[0]), ok = got === c[1];
+    if (!ok) failed++;
+    var d = document.createElement('div');
+    d.className = ok ? 'pass' : 'fail';
+    d.textContent = (ok ? 'PASS  ' : 'FAIL  ') + c[0] + '  ->  ' + got + (ok ? '' : '   (want: ' + c[1] + ')');
+    out.appendChild(d);
+  });
+  var s = document.createElement('h2');
+  s.className = failed ? 'fail' : 'pass';
+  s.textContent = failed ? failed + ' / ' + CASES.length + ' FAILED' : 'ALL ' + CASES.length + ' PASS';
+  out.appendChild(s);
+</script>

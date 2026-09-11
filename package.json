@@ -1,0 +1,17 @@
+{
+  "name": "receipt-cert",
+  "private": true,
+  "scripts": {
+    "dev": "wrangler dev",
+    "deploy": "wrangler deploy",
+    "db:local": "wrangler d1 migrations apply receipt-db --local",
+    "db:remote": "wrangler d1 migrations apply receipt-db --remote"
+  },
+  "devDependencies": {
+    "wrangler": "^4.0.0"
+  },
+  "allowScripts": {
+    "esbuild@0.28.1": true,
+    "workerd@1.20260908.1": true
+  }
+}

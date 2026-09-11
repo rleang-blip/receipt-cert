@@ -1,0 +1,594 @@
+<!doctype html>
+<html lang="th">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>ใบรับรองแทนใบเสร็จรับเงิน</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Sarabun:wght@400;600;700&display=swap" rel="stylesheet">
+<style>
+  :root { --line:#d6d8dd; --ink:#1b1c1f; --muted:#6b6f76; --accent:#1c5fd6; --bg:#f4f5f7; }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0; background: var(--bg); color: var(--ink);
+    font-family: 'Sarabun', 'TH Sarabun New', 'Noto Sans Thai', system-ui, sans-serif;
+    font-size: 15px; line-height: 1.55;
+  }
+  .wrap { max-width: 900px; margin: 0 auto; padding: 16px; }
+  h1 { font-size: 19px; margin: 0 0 12px; }
+  h2 { font-size: 16px; margin: 20px 0 8px; }
+
+  .tabs { display: flex; gap: 4px; border-bottom: 2px solid var(--line); margin-bottom: 16px; flex-wrap: wrap; }
+  .tabs button {
+    border: 0; background: none; padding: 10px 16px; font: inherit; cursor: pointer;
+    color: var(--muted); border-bottom: 3px solid transparent; margin-bottom: -2px;
+  }
+  .tabs button.on { color: var(--accent); border-bottom-color: var(--accent); font-weight: 600; }
+
+  .tab { display: none; }
+  .tab.on { display: block; }
+
+  .card { background: #fff; border: 1px solid var(--line); border-radius: 8px; padding: 16px; margin-bottom: 16px; }
+  fieldset { border: 0; padding: 0; margin: 0; }
+  fieldset[disabled] { opacity: .65; }
+
+  .grid { display: grid; grid-template-columns: repeat(2, 1fr); gap: 10px 14px; }
+  .grid .full { grid-column: 1 / -1; }
+  @media (max-width: 620px) { .grid { grid-template-columns: 1fr; } }
+
+  label { display: block; font-size: 13px; color: var(--muted); margin-bottom: 3px; }
+  input, select, textarea, button { font: inherit; font-family: inherit; }
+  input, select, textarea {
+    width: 100%; padding: 7px 9px; border: 1px solid var(--line);
+    border-radius: 6px; background: #fff; color: var(--ink);
+  }
+  input:focus, select:focus, textarea:focus { outline: 2px solid var(--accent); outline-offset: -1px; border-color: var(--accent); }
+  .num { text-align: right; font-variant-numeric: tabular-nums; }
+
+  button.btn {
+    padding: 9px 18px; border-radius: 6px; border: 1px solid var(--line);
+    background: #fff; cursor: pointer;
+  }
+  button.btn.primary { background: var(--accent); border-color: var(--accent); color: #fff; font-weight: 600; }
+  button.btn.danger { color: #c0242b; }
+  button.btn:hover { filter: brightness(.96); }
+  .actions { display: flex; gap: 8px; flex-wrap: wrap; margin: 14px 0 24px; }
+
+  table { width: 100%; border-collapse: collapse; }
+  th, td { text-align: left; padding: 7px 8px; border-bottom: 1px solid var(--line); vertical-align: top; }
+  th { font-size: 13px; color: var(--muted); font-weight: 600; }
+  tbody tr.click { cursor: pointer; }
+  tbody tr.click:hover { background: #eef3fd; }
+
+  .msg { padding: 10px 12px; border-radius: 6px; margin-bottom: 12px; }
+  .msg.err { background: #fdeced; color: #97161d; }
+  .msg.ok  { background: #e7f6ed; color: #0a5b32; }
+  .muted { color: var(--muted); font-size: 13px; }
+
+  /* ---------- ตัวเอกสาร ---------- */
+  .doc {
+    background: #fff; color: #000; border: 1px solid var(--line);
+    padding: 15mm; margin: 0 auto; max-width: 210mm; line-height: 1.75;
+  }
+  .doc h3 { text-align: center; font-size: 20px; margin: 0 0 14px; }
+  .doc .row { display: flex; justify-content: space-between; gap: 16px; align-items: flex-start; }
+  .doc .co { font-weight: 600; }
+  .doc .meta { text-align: right; white-space: nowrap; }
+  .doc p { margin: 6px 0; }
+  .doc .fill { border-bottom: 1px dotted #555; padding: 0 6px; display: inline-block; min-width: 120px; }
+  .doc table { margin: 14px 0 6px; }
+  .doc table th, .doc table td { border: 1px solid #000; padding: 5px 8px; }
+  .doc table th { background: #f0f0f0; color: #000; text-align: center; }
+  .doc td.no { text-align: center; width: 40px; }
+  .doc td.amt, .doc th.amt { text-align: right; width: 120px; font-variant-numeric: tabular-nums; }
+  .doc .words { text-align: center; font-weight: 600; margin: 6px 0 26px; }
+  .doc .signs { display: flex; justify-content: space-around; text-align: center; margin-top: 34px; gap: 20px; }
+  .doc .signs div { flex: 1; }
+  .doc .sigline { border-bottom: 1px dotted #555; height: 26px; margin-bottom: 4px; }
+
+  /* ---------- พิมพ์ ---------- */
+  @page { size: A4; margin: 15mm; }
+  @media print {
+    body { background: #fff; }
+    .no-print { display: none !important; }
+    .wrap { max-width: none; padding: 0; }
+    #tab-new { display: block !important; }
+    .doc { border: 0; padding: 0; max-width: none; margin: 0; }
+  }
+</style>
+</head>
+<body>
+<div class="wrap">
+
+  <h1 class="no-print">ใบรับรองแทนใบเสร็จรับเงิน</h1>
+  <nav class="tabs no-print">
+    <button data-tab="new" class="on">ออกใบใหม่</button>
+    <button data-tab="companies">บริษัท</button>
+    <button data-tab="history">ประวัติ</button>
+  </nav>
+
+  <!-- ============ ออกใบใหม่ ============ -->
+  <section id="tab-new" class="tab on">
+    <div id="new-msg" class="no-print"></div>
+
+    <div class="card no-print">
+      <fieldset id="form">
+        <div class="grid">
+          <div>
+            <label for="f-company">บริษัท (พิมพ์เพื่อค้นหา)</label>
+            <input id="f-company" list="dl-companies" placeholder="พิมพ์ชื่อบริษัท…" autocomplete="off">
+            <datalist id="dl-companies"></datalist>
+          </div>
+          <div>
+            <label for="f-date">วันที่</label>
+            <input id="f-date" type="date">
+          </div>
+
+          <div>
+            <label for="f-payer">ข้าพเจ้า (ผู้จ่ายเงิน)</label>
+            <input id="f-payer" list="dl-payer" autocomplete="off">
+            <datalist id="dl-payer"></datalist>
+          </div>
+          <div>
+            <label for="f-position">ตำแหน่ง</label>
+            <input id="f-position" list="dl-position" autocomplete="off">
+            <datalist id="dl-position"></datalist>
+          </div>
+
+          <div>
+            <label for="f-payee">ผู้รับเงิน</label>
+            <input id="f-payee" list="dl-payee" autocomplete="off">
+            <datalist id="dl-payee"></datalist>
+          </div>
+          <div>
+            <label for="f-idcard">เลขบัตรประชาชนผู้รับเงิน</label>
+            <input id="f-idcard" autocomplete="off">
+          </div>
+
+          <div class="full">
+            <label for="f-payee-address">ที่อยู่ผู้รับเงิน</label>
+            <input id="f-payee-address" list="dl-payee-address" autocomplete="off">
+            <datalist id="dl-payee-address"></datalist>
+          </div>
+        </div>
+
+        <h2>รายการที่จ่าย</h2>
+        <table>
+          <thead><tr><th>รายการ</th><th style="width:150px">จำนวนเงิน (บาท)</th><th style="width:44px"></th></tr></thead>
+          <tbody id="items"></tbody>
+        </table>
+        <div class="actions">
+          <button type="button" class="btn" id="add-item">+ เพิ่มรายการ</button>
+        </div>
+
+        <div>
+          <label for="f-note">หมายเหตุ (ไม่บังคับ)</label>
+          <input id="f-note" autocomplete="off">
+        </div>
+      </fieldset>
+    </div>
+
+    <div id="doc" class="doc"></div>
+
+    <div class="actions no-print">
+      <button class="btn primary" id="save">บันทึกและพิมพ์</button>
+      <button class="btn" id="print">พิมพ์</button>
+      <button class="btn" id="reset">เริ่มใบใหม่</button>
+    </div>
+  </section>
+
+  <!-- ============ บริษัท ============ -->
+  <section id="tab-companies" class="tab no-print">
+    <div id="co-msg"></div>
+    <div class="card">
+      <h2 style="margin-top:0" id="co-form-title">เพิ่มบริษัท</h2>
+      <div class="grid">
+        <div><label for="c-name">ชื่อบริษัท *</label><input id="c-name"></div>
+        <div><label for="c-branch">สาขา</label><input id="c-branch" placeholder="สำนักงานใหญ่"></div>
+        <div class="full"><label for="c-address">ที่อยู่</label><input id="c-address"></div>
+        <div><label for="c-tax">เลขประจำตัวผู้เสียภาษี</label><input id="c-tax"></div>
+      </div>
+      <div class="actions">
+        <button class="btn primary" id="c-save">บันทึก</button>
+        <button class="btn" id="c-cancel" hidden>ยกเลิกการแก้ไข</button>
+      </div>
+    </div>
+
+    <div class="card">
+      <label for="c-search">ค้นหาบริษัท</label>
+      <input id="c-search" placeholder="พิมพ์ชื่อบริษัท…">
+      <table style="margin-top:12px">
+        <thead><tr><th>ชื่อ</th><th>สาขา</th><th>เลขผู้เสียภาษี</th><th style="width:120px"></th></tr></thead>
+        <tbody id="co-list"></tbody>
+      </table>
+    </div>
+  </section>
+
+  <!-- ============ ประวัติ ============ -->
+  <section id="tab-history" class="tab no-print">
+    <div class="card">
+      <div class="grid">
+        <div class="full"><label for="h-q">ค้นหา (เลขที่ / ผู้จ่าย / ผู้รับ)</label><input id="h-q"></div>
+        <div><label for="h-company">บริษัท</label><select id="h-company"><option value="">— ทุกบริษัท —</option></select></div>
+        <div></div>
+        <div><label for="h-from">ตั้งแต่วันที่</label><input id="h-from" type="date"></div>
+        <div><label for="h-to">ถึงวันที่</label><input id="h-to" type="date"></div>
+      </div>
+    </div>
+    <div class="card">
+      <table>
+        <thead><tr><th>เลขที่</th><th>วันที่</th><th>บริษัท</th><th>ผู้รับเงิน</th><th class="num">จำนวนเงิน</th><th style="width:80px"></th></tr></thead>
+        <tbody id="h-list"></tbody>
+      </table>
+      <p class="muted" id="h-empty" hidden>ไม่พบข้อมูล</p>
+    </div>
+  </section>
+
+</div>
+
+<script src="baht.js"></script>
+<script>
+const MONTHS = ['มกราคม','กุมภาพันธ์','มีนาคม','เมษายน','พฤษภาคม','มิถุนายน',
+                'กรกฎาคม','สิงหาคม','กันยายน','ตุลาคม','พฤศจิกายน','ธันวาคม'];
+const $ = (s) => document.querySelector(s);
+const esc = (s) => String(s == null ? '' : s).replace(/[&<>"]/g, (c) => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
+const money = (satang) => (satang / 100).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+
+// "1,200.50" -> 120050 (สตางค์) ; NaN ถ้าอ่านไม่ออก
+function toSatang(text) {
+  const t = String(text == null ? '' : text).replace(/[,\s]/g, '');
+  if (!t || !/^\d*\.?\d*$/.test(t)) return NaN;
+  const n = parseFloat(t);
+  return Number.isFinite(n) ? Math.round(n * 100) : NaN;
+}
+
+function thaiDate(iso) {
+  const m = /^(\d{4})-(\d{2})-(\d{2})$/.exec(iso || '');
+  if (!m) return null;
+  return { d: +m[3], month: MONTHS[+m[2] - 1], year: +m[1] + 543 };
+}
+
+async function api(path, opts) {
+  const res = await fetch('/api/' + path, {
+    headers: { 'content-type': 'application/json' },
+    ...opts,
+    body: opts && opts.body ? JSON.stringify(opts.body) : undefined,
+  });
+  const data = await res.json().catch(() => ({ error: 'เซิร์ฟเวอร์ตอบกลับไม่ถูกต้อง' }));
+  if (!res.ok) throw new Error(data.error || 'เกิดข้อผิดพลาด');
+  return data;
+}
+
+function flash(el, text, kind) {
+  el.innerHTML = text ? '<div class="msg ' + kind + '">' + esc(text) + '</div>' : '';
+  if (text) el.scrollIntoView({ block: 'nearest' });
+}
+
+const state = { companies: [], saved: null, editingCompany: null };
+
+/* ---------------- แท็บ ---------------- */
+document.querySelectorAll('.tabs button').forEach((b) => {
+  b.onclick = () => {
+    document.querySelectorAll('.tabs button').forEach((x) => x.classList.toggle('on', x === b));
+    document.querySelectorAll('.tab').forEach((t) => t.classList.toggle('on', t.id === 'tab-' + b.dataset.tab));
+    if (b.dataset.tab === 'companies') loadCompanyList();
+    if (b.dataset.tab === 'history') loadHistory();
+  };
+});
+function goTab(name) { document.querySelector('.tabs button[data-tab="' + name + '"]').click(); }
+
+/* ---------------- รายการที่จ่าย ---------------- */
+function addItemRow(desc, amountText) {
+  const tr = document.createElement('tr');
+  tr.innerHTML =
+    '<td><input class="i-desc" autocomplete="off"></td>' +
+    '<td><input class="i-amt num" inputmode="decimal" autocomplete="off"></td>' +
+    '<td><button type="button" class="btn danger i-del" title="ลบแถว">✕</button></td>';
+  tr.querySelector('.i-desc').value = desc || '';
+  tr.querySelector('.i-amt').value = amountText || '';
+  tr.querySelector('.i-del').onclick = () => {
+    tr.remove();
+    if (!$('#items').children.length) addItemRow();
+    renderDoc();
+  };
+  $('#items').appendChild(tr);
+  return tr;
+}
+$('#add-item').onclick = () => { addItemRow().querySelector('.i-desc').focus(); };
+
+function readItems() {
+  return [...$('#items').querySelectorAll('tr')].map((tr) => ({
+    desc: tr.querySelector('.i-desc').value.trim(),
+    amountText: tr.querySelector('.i-amt').value.trim(),
+    amount_satang: toSatang(tr.querySelector('.i-amt').value),
+  })).filter((it) => it.desc || it.amountText);
+}
+
+/* ---------------- เก็บค่าจากฟอร์ม -> ทรงเดียวกับ row ใน DB ---------------- */
+function currentCompany() {
+  const name = $('#f-company').value.trim();
+  return state.companies.find((c) => c.name === name) || null;
+}
+
+function collect() {
+  const co = currentCompany();
+  const items = readItems();
+  return {
+    doc_no: state.saved ? state.saved.doc_no : '',
+    company_id: co ? co.id : 0,
+    company_name: co ? co.name : $('#f-company').value.trim(),
+    company_branch: co ? co.branch : '',
+    company_address: co ? co.address : '',
+    company_tax_id: co ? co.tax_id : '',
+    doc_date: $('#f-date').value,
+    payer_name: $('#f-payer').value.trim(),
+    payer_position: $('#f-position').value.trim(),
+    payee_name: $('#f-payee').value.trim(),
+    payee_address: $('#f-payee-address').value.trim(),
+    payee_idcard: $('#f-idcard').value.trim(),
+    note: $('#f-note').value.trim(),
+    items: items,
+    total_satang: items.reduce((s, it) => s + (Number.isFinite(it.amount_satang) ? it.amount_satang : 0), 0),
+  };
+}
+
+/* ---------------- วาดเอกสาร ---------------- */
+const MIN_ROWS = 6;
+function renderDoc(data) {
+  const d = data || collect();
+  const dt = thaiDate(d.doc_date);
+  const rows = d.items.slice();
+  while (rows.length < MIN_ROWS) rows.push(null);
+
+  const head = [d.company_name, d.company_branch && ('สาขา ' + d.company_branch)].filter(Boolean).join(' — ');
+
+  $('#doc').innerHTML =
+    '<h3>ใบรับรองแทนใบเสร็จรับเงิน</h3>' +
+    '<div class="row">' +
+      '<div><div class="co">' + (esc(head) || '— ยังไม่ได้เลือกบริษัท —') + '</div>' +
+        (d.company_address ? '<div>' + esc(d.company_address) + '</div>' : '') +
+        (d.company_tax_id ? '<div>เลขประจำตัวผู้เสียภาษี ' + esc(d.company_tax_id) + '</div>' : '') +
+      '</div>' +
+      '<div class="meta">เลขที่ <span class="fill">' + (esc(d.doc_no) || '') + '</span><br>' +
+        (dt ? 'วันที่ ' + dt.d + ' เดือน ' + dt.month + ' พ.ศ. ' + dt.year : 'วันที่ ______') +
+      '</div>' +
+    '</div>' +
+
+    '<p>ข้าพเจ้า <span class="fill">' + esc(d.payer_name) + '</span> ' +
+      'ตำแหน่ง <span class="fill">' + esc(d.payer_position) + '</span></p>' +
+    '<p>ขอรับรองว่า รายจ่ายต่อไปนี้เป็นรายจ่ายเพื่อกิจการของบริษัทจริง ' +
+      'และไม่อาจเรียกใบเสร็จรับเงินจากผู้รับเงินได้</p>' +
+    '<p>จ่ายให้ (ผู้รับเงิน) <span class="fill">' + esc(d.payee_name) + '</span> ' +
+      'เลขบัตรประชาชน <span class="fill">' + esc(d.payee_idcard) + '</span></p>' +
+    '<p>ที่อยู่ <span class="fill" style="min-width:400px">' + esc(d.payee_address) + '</span></p>' +
+
+    '<table><thead><tr><th style="width:40px">ที่</th><th>รายการ</th><th class="amt">จำนวนเงิน</th></tr></thead><tbody>' +
+      rows.map((it, i) =>
+        '<tr><td class="no">' + (it ? i + 1 : '&nbsp;') + '</td>' +
+        '<td>' + (it ? esc(it.desc) : '&nbsp;') + '</td>' +
+        '<td class="amt">' + (it && Number.isFinite(it.amount_satang) ? money(it.amount_satang) : '&nbsp;') + '</td></tr>'
+      ).join('') +
+      '<tr><td colspan="2" style="text-align:right;font-weight:700">รวมเป็นเงิน</td>' +
+      '<td class="amt" style="font-weight:700">' + money(d.total_satang) + '</td></tr>' +
+    '</tbody></table>' +
+    '<div class="words">(' + bahtText(d.total_satang) + ')</div>' +
+    (d.note ? '<p>หมายเหตุ: ' + esc(d.note) + '</p>' : '') +
+
+    '<div class="signs">' +
+      '<div><div class="sigline"></div>ผู้จ่ายเงิน<br>(' + (esc(d.payer_name) || '&nbsp;') + ')</div>' +
+      '<div><div class="sigline"></div>ผู้อนุมัติ<br>(&nbsp;)</div>' +
+    '</div>';
+}
+
+/* ---------------- ฟอร์ม: โหลด / ล้าง / ล็อก ---------------- */
+function setSaved(row) {
+  state.saved = row;
+  $('#form').disabled = !!row;
+  $('#save').hidden = !!row;
+  $('#add-item').disabled = !!row;
+  flash($('#new-msg'), row ? 'บันทึกแล้ว เลขที่ ' + row.doc_no : '', 'ok');
+}
+
+function resetForm() {
+  ['#f-company','#f-payer','#f-position','#f-payee','#f-payee-address','#f-idcard','#f-note']
+    .forEach((s) => { $(s).value = ''; });
+  $('#f-date').value = new Date().toISOString().slice(0, 10);
+  $('#items').innerHTML = '';
+  addItemRow(); addItemRow();
+  setSaved(null);
+  renderDoc();
+}
+
+function loadCertificate(row) {
+  const items = JSON.parse(row.items_json || '[]');
+  $('#f-company').value = row.company_name || '';
+  $('#f-date').value = row.doc_date || '';
+  $('#f-payer').value = row.payer_name || '';
+  $('#f-position').value = row.payer_position || '';
+  $('#f-payee').value = row.payee_name || '';
+  $('#f-payee-address').value = row.payee_address || '';
+  $('#f-idcard').value = row.payee_idcard || '';
+  $('#f-note').value = row.note || '';
+  $('#items').innerHTML = '';
+  items.forEach((it) => addItemRow(it.desc, (it.amount_satang / 100).toFixed(2)));
+  setSaved(row);
+  // ใช้ snapshot จาก row เสมอ ไม่ไปอ่านตาราง companies (ที่อยู่บริษัทอาจถูกแก้ไปแล้ว)
+  renderDoc({ ...row, items });
+  goTab('new');
+}
+
+// วาดใหม่ทุกครั้งที่พิมพ์ (ยกเว้นตอนล็อกอยู่ ซึ่งวาดจาก snapshot ไปแล้ว)
+document.addEventListener('input', (e) => {
+  if (state.saved) return;
+  if (e.target.closest('#form')) renderDoc();
+});
+
+/* ---------------- บันทึก / พิมพ์ ---------------- */
+$('#print').onclick = () => window.print();
+$('#reset').onclick = resetForm;
+
+$('#save').onclick = async () => {
+  const d = collect();
+  const co = currentCompany();
+  if (!co) return flash($('#new-msg'), 'กรุณาเลือกบริษัทจากรายการ', 'err');
+  if (!d.payer_name) return flash($('#new-msg'), 'กรุณากรอกชื่อผู้จ่ายเงิน', 'err');
+  if (!d.payee_name) return flash($('#new-msg'), 'กรุณากรอกชื่อผู้รับเงิน', 'err');
+  const items = readItems();
+  if (!items.length) return flash($('#new-msg'), 'กรุณาเพิ่มรายการอย่างน้อย 1 รายการ', 'err');
+  for (const it of items) {
+    if (!it.desc) return flash($('#new-msg'), 'มีรายการที่ยังไม่ได้ใส่ชื่อ', 'err');
+    if (!Number.isInteger(it.amount_satang) || it.amount_satang <= 0)
+      return flash($('#new-msg'), 'จำนวนเงินของ "' + it.desc + '" ไม่ถูกต้อง', 'err');
+  }
+
+  $('#save').disabled = true;
+  try {
+    const row = await api('certificates', {
+      method: 'POST',
+      body: {
+        company_id: co.id,
+        doc_date: d.doc_date,
+        payer_name: d.payer_name, payer_position: d.payer_position,
+        payee_name: d.payee_name, payee_address: d.payee_address, payee_idcard: d.payee_idcard,
+        note: d.note,
+        items: items.map((it) => ({ desc: it.desc, amount_satang: it.amount_satang })),
+      },
+    });
+    setSaved(row);
+    renderDoc({ ...row, items: JSON.parse(row.items_json) });
+    loadNameLists();
+    window.print();
+  } catch (e) {
+    flash($('#new-msg'), e.message, 'err');
+  } finally {
+    $('#save').disabled = false;
+  }
+};
+
+/* ---------------- บริษัท ---------------- */
+async function loadCompanies() {
+  state.companies = await api('companies');
+  $('#dl-companies').innerHTML = state.companies
+    .map((c) => '<option value="' + esc(c.name) + '">' + esc([c.branch, c.tax_id].filter(Boolean).join(' · ')) + '</option>')
+    .join('');
+  $('#h-company').innerHTML = '<option value="">— ทุกบริษัท —</option>' +
+    state.companies.map((c) => '<option value="' + c.id + '">' + esc(c.name) + '</option>').join('');
+}
+
+async function loadCompanyList() {
+  const list = await api('companies?q=' + encodeURIComponent($('#c-search').value.trim()));
+  $('#co-list').innerHTML = list.map((c) =>
+    '<tr><td>' + esc(c.name) + '</td><td>' + esc(c.branch) + '</td><td>' + esc(c.tax_id) + '</td>' +
+    '<td><button class="btn" data-edit="' + c.id + '">แก้ไข</button> ' +
+        '<button class="btn danger" data-del="' + c.id + '">ลบ</button></td></tr>'
+  ).join('') || '<tr><td colspan="4" class="muted">ยังไม่มีบริษัท</td></tr>';
+
+  $('#co-list').querySelectorAll('[data-edit]').forEach((b) => {
+    b.onclick = () => {
+      const c = list.find((x) => x.id === +b.dataset.edit);
+      state.editingCompany = c.id;
+      $('#c-name').value = c.name || ''; $('#c-branch').value = c.branch || '';
+      $('#c-address').value = c.address || ''; $('#c-tax').value = c.tax_id || '';
+      $('#co-form-title').textContent = 'แก้ไขบริษัท: ' + c.name;
+      $('#c-cancel').hidden = false;
+      $('#c-name').focus();
+    };
+  });
+  $('#co-list').querySelectorAll('[data-del]').forEach((b) => {
+    b.onclick = async () => {
+      const c = list.find((x) => x.id === +b.dataset.del);
+      // ponytail: ให้กดยืนยันในปุ่มเอง เลี่ยง confirm() ที่บล็อกทั้งหน้า
+      if (b.dataset.armed !== '1') {
+        b.dataset.armed = '1'; b.textContent = 'กดอีกครั้งเพื่อลบ';
+        setTimeout(() => { b.dataset.armed = '0'; b.textContent = 'ลบ'; }, 4000);
+        return;
+      }
+      await api('companies/' + c.id, { method: 'DELETE' });
+      flash($('#co-msg'), 'ลบ ' + c.name + ' แล้ว (ใบเก่ายังเก็บข้อมูลบริษัทไว้ครบ)', 'ok');
+      await loadCompanies(); loadCompanyList();
+    };
+  });
+}
+
+$('#c-search').oninput = loadCompanyList;
+
+$('#c-cancel').onclick = () => {
+  state.editingCompany = null;
+  ['#c-name','#c-branch','#c-address','#c-tax'].forEach((s) => { $(s).value = ''; });
+  $('#co-form-title').textContent = 'เพิ่มบริษัท';
+  $('#c-cancel').hidden = true;
+};
+
+$('#c-save').onclick = async () => {
+  const body = {
+    name: $('#c-name').value.trim(), branch: $('#c-branch').value.trim(),
+    address: $('#c-address').value.trim(), tax_id: $('#c-tax').value.trim(),
+  };
+  if (!body.name) return flash($('#co-msg'), 'กรุณากรอกชื่อบริษัท', 'err');
+  try {
+    const editing = state.editingCompany;
+    await api(editing ? 'companies/' + editing : 'companies', { method: editing ? 'PUT' : 'POST', body });
+    flash($('#co-msg'), editing ? 'แก้ไขแล้ว' : 'เพิ่มบริษัทแล้ว', 'ok');
+    $('#c-cancel').onclick();
+    await loadCompanies(); loadCompanyList();
+  } catch (e) {
+    flash($('#co-msg'), e.message, 'err');
+  }
+};
+
+/* ---------------- autocomplete ชื่อ ---------------- */
+async function loadNameLists() {
+  const fields = [['payer','#dl-payer'], ['position','#dl-position'], ['payee','#dl-payee'], ['payee_address','#dl-payee-address']];
+  await Promise.all(fields.map(async ([f, sel]) => {
+    try {
+      const vals = await api('names?field=' + f);
+      $(sel).innerHTML = vals.map((v) => '<option value="' + esc(v) + '">').join('');
+    } catch (e) { /* ponytail: autocomplete ล่มไม่ควรบล็อกการออกใบ */ }
+  }));
+}
+
+/* ---------------- ประวัติ ---------------- */
+let historyTimer;
+async function loadHistory() {
+  const p = new URLSearchParams({
+    q: $('#h-q').value.trim(),
+    company_id: $('#h-company').value,
+    from: $('#h-from').value,
+    to: $('#h-to').value,
+  });
+  const list = await api('certificates?' + p);
+  $('#h-empty').hidden = list.length > 0;
+  $('#h-list').innerHTML = list.map((r) => {
+    const dt = thaiDate(r.doc_date);
+    return '<tr class="click" data-id="' + r.id + '">' +
+      '<td>' + esc(r.doc_no) + '</td>' +
+      '<td>' + (dt ? dt.d + ' ' + dt.month + ' ' + dt.year : '') + '</td>' +
+      '<td>' + esc(r.company_name) + '</td>' +
+      '<td>' + esc(r.payee_name) + '</td>' +
+      '<td class="num">' + money(r.total_satang) + '</td>' +
+      '<td><button class="btn" data-open="' + r.id + '">เปิด/พิมพ์</button></td></tr>';
+  }).join('');
+  $('#h-list').querySelectorAll('[data-open]').forEach((b) => {
+    b.onclick = async (ev) => {
+      ev.stopPropagation();
+      loadCertificate(await api('certificates/' + b.dataset.open));
+    };
+  });
+  $('#h-list').querySelectorAll('tr.click').forEach((tr) => {
+    tr.onclick = async () => loadCertificate(await api('certificates/' + tr.dataset.id));
+  });
+}
+['#h-q','#h-company','#h-from','#h-to'].forEach((s) => {
+  $(s).oninput = () => { clearTimeout(historyTimer); historyTimer = setTimeout(loadHistory, 250); };
+});
+
+/* ---------------- เริ่มทำงาน ---------------- */
+(async function init() {
+  resetForm();
+  try { await loadCompanies(); } catch (e) { flash($('#new-msg'), 'โหลดรายชื่อบริษัทไม่สำเร็จ: ' + e.message, 'err'); }
+  loadNameLists();
+})();
+</script>
+</body>
+</html>
