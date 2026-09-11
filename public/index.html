@@ -24,7 +24,9 @@
   .pane-right { position: sticky; top: 16px; max-height: calc(100vh - 32px); overflow: auto; }
   .pane-left .grid { grid-template-columns: 1fr; }   /* ฟอร์มในรางแคบ ใช้คอลัมน์เดียว */
   @media (max-width: 1000px) {
-    .split { grid-template-columns: 1fr; }
+    /* minmax(0,…) จำเป็น: 1fr เปล่าๆ มี min-width:auto จึงย่อต่ำกว่า .doc (210mm) ไม่ได้
+       ทำให้รางกว้าง 794px เสมอ fitDoc() คิดว่าไม่ต้องย่อ หน้าเลยล้นแนวนอน */
+    .split { grid-template-columns: minmax(0, 1fr); }
     .pane-right { position: static; max-height: none; overflow: visible; }
   }
   h1 { font-size: 19px; margin: 0 0 12px; }
@@ -46,7 +48,7 @@
 
   .grid { display: grid; grid-template-columns: repeat(2, 1fr); gap: 10px 14px; }
   .grid .full { grid-column: 1 / -1; }
-  @media (max-width: 620px) { .grid { grid-template-columns: 1fr; } }
+  @media (max-width: 640px) { .grid { grid-template-columns: 1fr; } }
 
   label { display: block; font-size: 13px; color: var(--muted); margin-bottom: 3px; }
   input, select, textarea, button { font: inherit; font-family: inherit; }
@@ -76,6 +78,37 @@
   .msg.err { background: #fdeced; color: #97161d; }
   .msg.ok  { background: #e7f6ed; color: #0a5b32; }
   .muted { color: var(--muted); font-size: 13px; }
+
+  /* ---------- มือถือ (< 640px) ---------- */
+  #toggle-doc { display: none; }
+  @media (max-width: 640px) {
+    .wrap { padding: 12px; }
+    .tabs button { flex: 1; padding: 12px 8px; }
+
+    /* ต่ำกว่า 16px Safari บน iOS จะซูมหน้าจอเองตอนแตะช่องกรอก
+       (แก้ที่นี่ ไม่ใช่ user-scalable=no ซึ่งจะปิดการซูมของผู้ใช้ทั้งหน้า) */
+    input, select, textarea { font-size: 16px; }
+
+    .actions { gap: 10px; }
+    .actions .btn { flex: 1 1 auto; min-height: 44px; }
+
+    /* ตัวอย่างเอกสารพับไว้ ที่ความกว้างนี้ย่อแล้วเหลือ ~6.8px อ่านไม่ออกอยู่ดี */
+    #toggle-doc { display: block; width: 100%; min-height: 44px; margin-bottom: 10px; }
+    #paper { display: none; }
+    .pane-right.show-doc #paper { display: block; }
+
+    /* ตารางบริษัท/ประวัติ -> การ์ดทีละราย (6 คอลัมน์บีบเหลือ ~60px อ่านไม่ไหว)
+       ไม่ใส่คลาส stack ที่ #items และ .doc table — สองตัวนั้นเป็นตารางที่ถูกต้องแล้ว */
+    .stack thead { display: none; }
+    .stack tr { display: block; border: 1px solid var(--line); border-radius: 8px;
+                padding: 10px 12px; margin-bottom: 10px; }
+    .stack td { display: flex; justify-content: space-between; gap: 12px;
+                border: 0; padding: 3px 0; text-align: left; }
+    .stack td::before { content: attr(data-label); color: var(--muted);
+                        font-size: 13px; flex: none; }
+    .stack td:not([data-label]) { padding-top: 8px; }   /* แถวปุ่ม ไม่มีหัวข้อกำกับ */
+    .stack td .btn { flex: 1 1 auto; min-height: 40px; }
+  }
 
   /* ---------- ตัวเอกสาร ---------- */
   /* ตัวอย่างบนจอเป็น A4 ขนาดจริง แล้วย่อด้วย transform ให้พอดีราง
@@ -113,7 +146,8 @@
     .pane-right { position: static !important; max-height: none !important; overflow: visible !important; }
     /* @page margin 15mm ทำหน้าที่เป็นขอบกระดาษแทน padding ของ .doc
        กว้างสุทธิ 210-30 = 180mm เท่ากับ content box บนจอเป๊ะ */
-    #paper { overflow: visible !important; height: auto !important; }
+    /* บังคับโชว์: บนมือถืออาจพับตัวอย่างอยู่ ถ้าไม่ใส่จะพิมพ์ได้กระดาษเปล่า */
+    #paper { display: block !important; overflow: visible !important; height: auto !important; }
     .doc {
       border: 0; margin: 0; padding: 0 !important;
       width: auto !important; min-height: 0 !important;
@@ -217,6 +251,7 @@
     </div><!-- /pane-left -->
 
     <div class="pane-right">
+      <button type="button" class="btn no-print" id="toggle-doc">ดูตัวอย่างเอกสาร</button>
       <div id="paper"><div id="doc" class="doc"></div></div>
     </div>
     </div><!-- /split -->
@@ -245,7 +280,7 @@
     <div class="card">
       <label for="c-search">ค้นหาบริษัท</label>
       <input id="c-search" placeholder="พิมพ์ชื่อบริษัท…">
-      <table style="margin-top:12px">
+      <table class="stack" style="margin-top:12px">
         <thead><tr><th style="width:80px">รหัส</th><th>ชื่อ</th><th>สาขา</th><th>เลขผู้เสียภาษี</th><th style="width:120px"></th></tr></thead>
         <tbody id="co-list"></tbody>
       </table>
@@ -264,7 +299,7 @@
       </div>
     </div>
     <div class="card">
-      <table>
+      <table class="stack">
         <thead><tr><th>เลขที่</th><th>วันที่</th><th>บริษัท</th><th>ผู้รับเงิน</th><th class="num">จำนวนเงิน</th><th style="width:150px"></th></tr></thead>
         <tbody id="h-list"></tbody>
       </table>
@@ -453,6 +488,15 @@ function fitDoc() {
 }
 window.addEventListener('resize', fitDoc);
 
+// มือถือ: พับตัวอย่างเอกสารไว้ กดดูเมื่อต้องการ
+// ต้องเรียก fitDoc() ทุกครั้งที่กาง เพราะตอนซ่อนอยู่ (#paper display:none) วัดความกว้างได้ 0
+$('#toggle-doc').onclick = () => {
+  const pane = document.querySelector('.pane-right');
+  const shown = pane.classList.toggle('show-doc');
+  $('#toggle-doc').textContent = shown ? 'ซ่อนตัวอย่าง' : 'ดูตัวอย่างเอกสาร';
+  if (shown) fitDoc();
+};
+
 /* ---------------- ฟอร์ม: โหลด / ล้าง / ล็อก ---------------- */
 const fmtStamp = (iso) => { try { return new Date(iso).toLocaleString('th-TH'); } catch (e) { return iso; } };
 
@@ -584,7 +628,11 @@ async function loadCompanies() {
 async function loadCompanyList() {
   const list = await api('companies?q=' + encodeURIComponent($('#c-search').value.trim()));
   $('#co-list').innerHTML = list.map((c) =>
-    '<tr><td><b>' + esc(c.code) + '</b></td><td>' + esc(c.name) + '</td><td>' + esc(c.branch) + '</td><td>' + esc(c.tax_id) + '</td>' +
+    // data-label ใช้เป็นหัวข้อกำกับตอนตารางกลายเป็นการ์ดบนมือถือ (ดู .stack td::before)
+    '<tr><td data-label="รหัส"><b>' + esc(c.code) + '</b></td>' +
+    '<td data-label="ชื่อ">' + esc(c.name) + '</td>' +
+    '<td data-label="สาขา">' + esc(c.branch) + '</td>' +
+    '<td data-label="เลขผู้เสียภาษี">' + esc(c.tax_id) + '</td>' +
     '<td><button class="btn" data-edit="' + c.id + '">แก้ไข</button> ' +
         '<button class="btn danger" data-del="' + c.id + '">ลบ</button></td></tr>'
   ).join('') || '<tr><td colspan="5" class="muted">ยังไม่มีบริษัท</td></tr>';
@@ -673,13 +721,13 @@ async function loadHistory() {
   $('#h-list').innerHTML = list.map((r) => {
     const dt = thaiDate(r.doc_date);
     return '<tr class="click" data-id="' + r.id + '">' +
-      '<td>' + esc(r.doc_no) +
+      '<td data-label="เลขที่">' + esc(r.doc_no) +
         (r.updated_at ? ' <span class="muted" title="แก้ไขล่าสุด ' + esc(fmtStamp(r.updated_at)) + '">✎</span>' : '') +
       '</td>' +
-      '<td>' + (dt ? dt.d + ' ' + dt.month + ' ' + dt.year : '') + '</td>' +
-      '<td>' + esc(r.company_name) + '</td>' +
-      '<td>' + esc(r.payee_name) + '</td>' +
-      '<td class="num">' + money(r.total_satang) + '</td>' +
+      '<td data-label="วันที่">' + (dt ? dt.d + ' ' + dt.month + ' ' + dt.year : '') + '</td>' +
+      '<td data-label="บริษัท">' + esc(r.company_name) + '</td>' +
+      '<td data-label="ผู้รับเงิน">' + esc(r.payee_name) + '</td>' +
+      '<td class="num" data-label="จำนวนเงิน">' + money(r.total_satang) + '</td>' +
       '<td><button class="btn" data-open="' + r.id + '">เปิด</button> ' +
           '<button class="btn" data-edit-cert="' + r.id + '">แก้ไข</button></td></tr>';
   }).join('');
