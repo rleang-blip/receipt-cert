@@ -9,6 +9,8 @@ const json = (data, status = 200) =>
 
 const bad = (msg) => json({ error: msg }, 400);
 const str = (v) => (v == null ? '' : String(v).trim());
+// วันที่แบบไม่บังคับ — ว่างได้ แต่ถ้ามีต้องเป็น ISO ไม่งั้นเก็บเป็นค่าว่าง
+const isoDate = (v) => (/^\d{4}-\d{2}-\d{2}$/.test(str(v)) ? str(v) : '');
 
 const CODE_RE = /^[A-Z0-9]{2,10}$/;   // รหัสบริษัท: ตัวอักษรอังกฤษ/ตัวเลข 2-10 ตัว
 
@@ -32,7 +34,6 @@ const NAME_FIELDS = {
   payer: 'payer_name',
   position: 'payer_position',
   payee: 'payee_name',
-  payee_address: 'payee_address',
   approver: 'approver_name',
 };
 
@@ -173,9 +174,10 @@ function validateCertificate(b) {
   return {
     doc_date, payer_name, payee_name,
     payer_position: str(b.payer_position),
-    payee_address: str(b.payee_address),
-    payee_idcard: str(b.payee_idcard),
+    period_from: isoDate(b.period_from),
+    period_to: isoDate(b.period_to),
     approver_name: str(b.approver_name),   // ไม่บังคับ เว้นว่างไว้เซ็นสดได้
+    approver_position: str(b.approver_position),
     note: str(b.note),
     items_json: JSON.stringify(clean),
     total_satang: clean.reduce((s, it) => s + it.amount_satang, 0),
@@ -206,13 +208,14 @@ async function createCertificate(b, DB) {
   const row = await DB.prepare(
     `INSERT INTO certificates (
        doc_no, company_id, company_name, company_branch, company_address, company_tax_id,
-       doc_date, payer_name, payer_position, payee_name, payee_address, payee_idcard,
-       approver_name, items_json, total_satang, note, created_at
-     ) VALUES (?1,?2,?3,?4,?5,?6,?7,?8,?9,?10,?11,?12,?13,?14,?15,?16,?17) RETURNING *`
+       doc_date, payer_name, payer_position, payee_name, period_from, period_to,
+       approver_name, approver_position, items_json, total_satang, note, created_at
+     ) VALUES (?1,?2,?3,?4,?5,?6,?7,?8,?9,?10,?11,?12,?13,?14,?15,?16,?17,?18) RETURNING *`
   ).bind(
     doc_no, co.id, co.name, co.branch, co.address, co.tax_id,
-    v.doc_date, v.payer_name, v.payer_position, v.payee_name, v.payee_address, v.payee_idcard,
-    v.approver_name, v.items_json, v.total_satang, v.note, new Date().toISOString()
+    v.doc_date, v.payer_name, v.payer_position, v.payee_name, v.period_from, v.period_to,
+    v.approver_name, v.approver_position, v.items_json, v.total_satang, v.note,
+    new Date().toISOString()
   ).first();
 
   return json(row, 201);
@@ -277,15 +280,15 @@ async function updateCertificate(id, b, DB) {
     `UPDATE certificates SET
        doc_no=?18,
        company_id=?2, company_name=?3, company_branch=?4, company_address=?5, company_tax_id=?6,
-       doc_date=?7, payer_name=?8, payer_position=?9, payee_name=?10, payee_address=?11,
-       payee_idcard=?12, approver_name=?13, items_json=?14, total_satang=?15, note=?16,
-       updated_at=?17
+       doc_date=?7, payer_name=?8, payer_position=?9, payee_name=?10, period_from=?11,
+       period_to=?12, approver_name=?13, items_json=?14, total_satang=?15, note=?16,
+       updated_at=?17, approver_position=?19
      WHERE id=?1 RETURNING *`
   ).bind(
     id, snap.id, snap.name, snap.branch, snap.address, snap.tax_id,
-    v.doc_date, v.payer_name, v.payer_position, v.payee_name, v.payee_address, v.payee_idcard,
+    v.doc_date, v.payer_name, v.payer_position, v.payee_name, v.period_from, v.period_to,
     v.approver_name, v.items_json, v.total_satang, v.note, new Date().toISOString(),
-    doc_no
+    doc_no, v.approver_position
   ).first();
 
   return json(row);

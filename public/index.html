@@ -130,7 +130,7 @@
   .doc table th { background: #f0f0f0; color: #000; text-align: center; }
   .doc td.no { text-align: center; width: 40px; }
   .doc td.amt, .doc th.amt { text-align: right; width: 120px; font-variant-numeric: tabular-nums; }
-  .doc .words { text-align: center; font-weight: 600; margin: 6px 0 26px; }
+  .doc .words { text-align: center; font-weight: 600; margin: 6px 0 10px; }
   .doc .signs { display: flex; justify-content: space-around; text-align: center; margin-top: 34px; gap: 20px; }
   .doc .signs div { flex: 1; }
   .doc .sigline { border-bottom: 1px dotted #555; height: 26px; margin-bottom: 4px; }
@@ -207,20 +207,22 @@
             <datalist id="dl-payee"></datalist>
           </div>
           <div>
-            <label for="f-idcard">เลขบัตรประชาชนผู้รับเงิน</label>
-            <input id="f-idcard" autocomplete="off">
+            <label for="f-period-from">จ่ายตั้งแต่วันที่</label>
+            <input id="f-period-from" type="date">
+          </div>
+          <div>
+            <label for="f-period-to">ถึงวันที่</label>
+            <input id="f-period-to" type="date">
           </div>
 
-          <div class="full">
-            <label for="f-payee-address">ที่อยู่ผู้รับเงิน</label>
-            <input id="f-payee-address" list="dl-payee-address" autocomplete="off">
-            <datalist id="dl-payee-address"></datalist>
-          </div>
-
-          <div class="full">
+          <div>
             <label for="f-approver">ผู้อนุมัติ (เว้นว่างไว้เซ็นสดบนกระดาษได้)</label>
             <input id="f-approver" list="dl-approver" autocomplete="off">
             <datalist id="dl-approver"></datalist>
+          </div>
+          <div>
+            <label for="f-approver-position">ตำแหน่ง</label>
+            <input id="f-approver-position" list="dl-position" autocomplete="off">
           </div>
         </div>
 
@@ -331,6 +333,12 @@ function thaiDate(iso) {
   return { d: +m[3], month: MONTHS[+m[2] - 1], year: +m[1] + 543 };
 }
 
+// วันที่ไทยสำหรับช่องเส้นประ — ว่าง/ไม่ถูกรูปแบบ = เส้นประเปล่าให้เขียนมือ
+function thaiFill(iso) {
+  const t = thaiDate(iso);
+  return t ? t.d + ' ' + t.month + ' ' + t.year : '&nbsp;';
+}
+
 async function api(path, opts) {
   const res = await fetch('/api/' + path, {
     headers: { 'content-type': 'application/json' },
@@ -416,9 +424,10 @@ function collect() {
     payer_name: $('#f-payer').value.trim(),
     payer_position: $('#f-position').value.trim(),
     payee_name: $('#f-payee').value.trim(),
-    payee_address: $('#f-payee-address').value.trim(),
-    payee_idcard: $('#f-idcard').value.trim(),
+    period_from: $('#f-period-from').value,
+    period_to: $('#f-period-to').value,
     approver_name: $('#f-approver').value.trim(),
+    approver_position: $('#f-approver-position').value.trim(),
     note: $('#f-note').value.trim(),
     items: items,
     total_satang: items.reduce((s, it) => s + (Number.isFinite(it.amount_satang) ? it.amount_satang : 0), 0),
@@ -449,11 +458,7 @@ function renderDoc(data) {
 
     '<p>ข้าพเจ้า <span class="fill">' + esc(d.payer_name) + '</span> ' +
       'ตำแหน่ง <span class="fill">' + esc(d.payer_position) + '</span></p>' +
-    '<p>ขอรับรองว่า รายจ่ายต่อไปนี้เป็นรายจ่ายเพื่อกิจการของบริษัทจริง ' +
-      'และไม่อาจเรียกใบเสร็จรับเงินจากผู้รับเงินได้</p>' +
-    '<p>จ่ายให้ (ผู้รับเงิน) <span class="fill">' + esc(d.payee_name) + '</span> ' +
-      'เลขบัตรประชาชน <span class="fill">' + esc(d.payee_idcard) + '</span></p>' +
-    '<p>ที่อยู่ <span class="fill" style="min-width:50%">' + esc(d.payee_address) + '</span></p>' +
+    '<p>จ่ายให้ (ผู้รับเงิน) <span class="fill" style="min-width:40%">' + esc(d.payee_name) + '</span></p>' +
 
     '<table><thead><tr><th style="width:40px">ที่</th><th>รายการ</th><th class="amt">จำนวนเงิน</th></tr></thead><tbody>' +
       rows.map((it, i) =>
@@ -467,9 +472,18 @@ function renderDoc(data) {
     '<div class="words">(' + bahtText(d.total_satang) + ')</div>' +
     (d.note ? '<p>หมายเหตุ: ' + esc(d.note) + '</p>' : '') +
 
+    // ข้อความรับรองต้องอยู่ใต้ตาราง — ขึ้นต้นว่า "รายจ่ายข้างต้นนี้"
+    // เว้นช่วงวันที่ว่างไว้ได้ จะได้เส้นประให้เขียนมือ
+    '<p style="text-indent:2.5em">ขอรับรองว่า รายจ่ายข้างต้นนี้ไม่อาจเรียกเก็บใบเสร็จรับเงินจากผู้รับได้ ' +
+      'และข้าพเจ้าได้จ่ายไปในงานของทาง ' + (esc(d.company_name) || 'บริษัท /ห้างหุ้นส่วนจำกัด') + ' โดยแท้ ' +
+      'ตั้งแต่วันที่ <span class="fill">' + thaiFill(d.period_from) + '</span> ' +
+      'ถึงวันที่ <span class="fill">' + thaiFill(d.period_to) + '</span></p>' +
+
     '<div class="signs">' +
-      '<div><div class="sigline"></div>ผู้เบิกจ่าย<br>(' + (esc(d.payer_name) || '&nbsp;') + ')</div>' +
-      '<div><div class="sigline"></div>ผู้อนุมัติ<br>(' + (esc(d.approver_name) || '&nbsp;') + ')</div>' +
+      '<div><div class="sigline"></div>ผู้เบิกจ่าย<br>(' + (esc(d.payer_name) || '&nbsp;') + ')' +
+        '<br>ตำแหน่ง ' + (esc(d.payer_position) || '&nbsp;') + '</div>' +
+      '<div><div class="sigline"></div>ผู้อนุมัติ<br>(' + (esc(d.approver_name) || '&nbsp;') + ')' +
+        '<br>ตำแหน่ง ' + (esc(d.approver_position) || '&nbsp;') + '</div>' +
     '</div>';
 
   fitDoc();
@@ -522,8 +536,8 @@ function setMode(row, editing) {
 }
 
 function resetForm() {
-  ['#f-company','#f-payer','#f-position','#f-payee','#f-payee-address','#f-idcard','#f-approver','#f-note','#f-docno']
-    .forEach((s) => { $(s).value = ''; });
+  ['#f-company','#f-payer','#f-position','#f-payee','#f-period-from','#f-period-to',
+   '#f-approver','#f-approver-position','#f-note','#f-docno'].forEach((s) => { $(s).value = ''; });
   $('#f-date').value = new Date().toISOString().slice(0, 10);
   $('#items').innerHTML = '';
   addItemRow(); addItemRow();
@@ -539,9 +553,10 @@ function loadCertificate(row, editing) {
   $('#f-payer').value = row.payer_name || '';
   $('#f-position').value = row.payer_position || '';
   $('#f-payee').value = row.payee_name || '';
-  $('#f-payee-address').value = row.payee_address || '';
-  $('#f-idcard').value = row.payee_idcard || '';
+  $('#f-period-from').value = row.period_from || '';
+  $('#f-period-to').value = row.period_to || '';
   $('#f-approver').value = row.approver_name || '';
+  $('#f-approver-position').value = row.approver_position || '';
   $('#f-note').value = row.note || '';
   $('#items').innerHTML = '';
   items.forEach((it) => addItemRow(it.desc, (it.amount_satang / 100).toFixed(2)));
@@ -579,8 +594,8 @@ function buildPayload() {
     company_id: co.id,
     doc_date: d.doc_date,
     payer_name: d.payer_name, payer_position: d.payer_position,
-    payee_name: d.payee_name, payee_address: d.payee_address, payee_idcard: d.payee_idcard,
-    approver_name: d.approver_name,
+    payee_name: d.payee_name, period_from: d.period_from, period_to: d.period_to,
+    approver_name: d.approver_name, approver_position: d.approver_position,
     note: d.note,
     items: items.map((it) => ({ desc: it.desc, amount_satang: it.amount_satang })),
   };
@@ -698,7 +713,7 @@ $('#c-save').onclick = async () => {
 /* ---------------- autocomplete ชื่อ ---------------- */
 async function loadNameLists() {
   const fields = [['payer','#dl-payer'], ['position','#dl-position'], ['payee','#dl-payee'],
-                  ['payee_address','#dl-payee-address'], ['approver','#dl-approver']];
+                  ['approver','#dl-approver']];
   await Promise.all(fields.map(async ([f, sel]) => {
     try {
       const vals = await api('names?field=' + f);
