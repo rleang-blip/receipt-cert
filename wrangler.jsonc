@@ -1,6 +1,7 @@
 {
 	"$schema": "node_modules/wrangler/config-schema.json",
 	"name": "receipt-cert",
+	"account_id": "dd0ba0829e3cd61bfbc335ffe86e9caa",
 	"main": "src/index.js",
 	"compatibility_date": "2025-09-01",
 	// ปิดทุก URL ที่ลงท้าย .workers.dev เพราะ Cloudflare Access ผูกกับ hostname ใน routes
@@ -11,7 +12,7 @@
 	// (Zero Trust > Access > Applications > Self-hosted)
 	"routes": [
 		{
-			"pattern": "receipt.altitech.co.th",
+			"pattern": "receipt.sukanyayot.com",
 			"custom_domain": true
 		}
 	],
@@ -25,7 +26,7 @@
 		{
 			"binding": "DB",
 			"database_name": "receipt-db",
-			"database_id": "60ecefcf-12f7-4208-9987-f885469ea349"
+			"database_id": "b0cb300a-a7f9-47c5-93e2-14e5b95c446f"
 		}
 	]
 }
