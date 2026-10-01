@@ -16,6 +16,9 @@
 			"custom_domain": true
 		}
 	],
+	"triggers": {
+		"crons": ["0 17 * * *"]
+	},
 	"assets": {
 		"directory": "./public",
 		"binding": "ASSETS"

@@ -135,6 +135,10 @@
   .doc .signs div { flex: 1; }
   .doc .sigline { border-bottom: 1px dotted #555; height: 26px; margin-bottom: 4px; }
 
+  /* ---------- พิมพ์รวมหลายใบจากประวัติ ---------- */
+  #batch-print { display: none; }
+  .h-check, #h-all { width: 18px; height: 18px; accent-color: var(--accent); cursor: pointer; }
+
   /* ---------- พิมพ์ ---------- */
   @page { size: A4; margin: 15mm; }
   @media print {
@@ -153,6 +157,11 @@
       width: auto !important; min-height: 0 !important;
       transform: none !important;
     }
+    /* พิมพ์รวม: ซ่อนหน้าปกติทั้งหมด โชว์เฉพาะใบที่เลือก ใบละ 1 หน้า A4 */
+    body.batch-printing .wrap { display: none !important; }
+    body.batch-printing #batch-print { display: block !important; }
+    body.batch-printing .batch-doc { page-break-after: always; }
+    body.batch-printing .batch-doc:last-child { page-break-after: auto; }
   }
 </style>
 </head>
@@ -291,6 +300,7 @@
 
   <!-- ============ ประวัติ ============ -->
   <section id="tab-history" class="tab no-print">
+    <div id="h-msg"></div>
     <div class="card">
       <div class="grid">
         <div class="full"><label for="h-q">ค้นหา (เลขที่ / ผู้จ่าย / ผู้รับ)</label><input id="h-q"></div>
@@ -301,15 +311,32 @@
       </div>
     </div>
     <div class="card">
+      <h2 style="margin-top:0">ประวัติใบรับรอง</h2>
+      <div class="actions">
+        <button class="btn primary" id="h-print">พิมพ์ที่เลือก (<span id="h-count">0</span>)</button>
+        <button class="btn" id="h-clear">ล้างที่เลือก</button>
+        <span class="muted">ติ๊กเลือก 1 ใบหรือหลายใบแล้วกดพิมพ์ ได้ใบละ 1 หน้า A4</span>
+      </div>
       <table class="stack">
-        <thead><tr><th>เลขที่</th><th>วันที่</th><th>บริษัท</th><th>ผู้รับเงิน</th><th class="num">จำนวนเงิน</th><th style="width:150px"></th></tr></thead>
+        <thead><tr><th style="width:36px"><input type="checkbox" id="h-all" title="เลือกทั้งหมด"></th><th>เลขที่</th><th>วันที่</th><th>บริษัท</th><th>ผู้รับเงิน</th><th class="num">จำนวนเงิน</th><th style="width:210px"></th></tr></thead>
         <tbody id="h-list"></tbody>
       </table>
       <p class="muted" id="h-empty" hidden>ไม่พบข้อมูล</p>
     </div>
+    <div class="card">
+      <h2 style="margin-top:0">ถังขยะ <span class="muted">— เก็บ 14 วัน กู้คืนได้</span></h2>
+      <p class="muted">กดลบ = ย้ายลงถังขยะก่อน ครบ 14 วันระบบจะลบถาวรอัตโนมัติและกู้คืนไม่ได้</p>
+      <table class="stack">
+        <thead><tr><th>เลขที่</th><th>วันที่ลบ</th><th>คงเหลือ</th><th>บริษัท</th><th class="num">จำนวนเงิน</th><th style="width:230px"></th></tr></thead>
+        <tbody id="t-list"></tbody>
+      </table>
+      <p class="muted" id="t-empty" hidden>ถังขยะว่าง</p>
+    </div>
   </section>
 
 </div>
+
+<div id="batch-print"></div>
 
 <script src="baht.js"></script>
 <script>
@@ -355,7 +382,7 @@ function flash(el, text, kind) {
   if (text) el.scrollIntoView({ block: 'nearest' });
 }
 
-const state = { companies: [], saved: null, editing: false, editingCompany: null };
+const state = { companies: [], saved: null, editing: false, editingCompany: null, selected: new Set() };
 
 /* ---------------- แท็บ ---------------- */
 document.querySelectorAll('.tabs button').forEach((b) => {
@@ -364,7 +391,7 @@ document.querySelectorAll('.tabs button').forEach((b) => {
     document.querySelectorAll('.tab').forEach((t) => t.classList.toggle('on', t.id === 'tab-' + b.dataset.tab));
     if (b.dataset.tab === 'new') fitDoc();
     if (b.dataset.tab === 'companies') loadCompanyList();
-    if (b.dataset.tab === 'history') loadHistory();
+    if (b.dataset.tab === 'history') { loadHistory(); loadTrash(); }
   };
 });
 function goTab(name) { document.querySelector('.tabs button[data-tab="' + name + '"]').click(); }
@@ -436,16 +463,16 @@ function collect() {
 
 /* ---------------- วาดเอกสาร ---------------- */
 const MIN_ROWS = 6;
-function renderDoc(data) {
-  const d = data || collect();
+// สร้าง HTML เอกสาร 1 ใบจากข้อมูลทรงเดียวกับ row ใน DB (ใช้ร่วมกันทั้ง preview ใบเดี่ยวและพิมพ์รวมหลายใบ)
+function docHTML(data) {
+  const d = data;
   const dt = thaiDate(d.doc_date);
   const rows = d.items.slice();
   while (rows.length < MIN_ROWS) rows.push(null);
 
   const head = [d.company_name, d.company_branch && ('สาขา ' + d.company_branch)].filter(Boolean).join(' — ');
 
-  $('#doc').innerHTML =
-    '<h3>ใบรับรองแทนใบเสร็จรับเงิน</h3>' +
+  return '<h3>ใบรับรองแทนใบเสร็จรับเงิน</h3>' +
     '<div class="row">' +
       '<div><div class="co">' + (esc(head) || '— ยังไม่ได้เลือกบริษัท —') + '</div>' +
         (d.company_address ? '<div>' + esc(d.company_address) + '</div>' : '') +
@@ -485,7 +512,10 @@ function renderDoc(data) {
       '<div><div class="sigline"></div>ผู้อนุมัติ<br>(' + (esc(d.approver_name) || '&nbsp;') + ')' +
         '<br>ตำแหน่ง ' + (esc(d.approver_position) || '&nbsp;') + '</div>' +
     '</div>';
+}
 
+function renderDoc(data) {
+  $('#doc').innerHTML = docHTML(data || collect());
   fitDoc();
 }
 
@@ -724,18 +754,70 @@ async function loadNameLists() {
 
 /* ---------------- ประวัติ ---------------- */
 let historyTimer;
-async function loadHistory() {
-  const p = new URLSearchParams({
+function historyParams(extra) {
+  return new URLSearchParams({
     q: $('#h-q').value.trim(),
     company_id: $('#h-company').value,
     from: $('#h-from').value,
     to: $('#h-to').value,
+    ...extra,
   });
-  const list = await api('certificates?' + p);
+}
+
+// เหลือเวลาก่อนถูกลบถาวร (0-14 วัน) — deleted_at เป็น ISO UTC จาก server
+function trashLeft(deleted_at) {
+  const ms = Date.now() - new Date(deleted_at).getTime();
+  if (!Number.isFinite(ms) || ms < 0) return 14;
+  return Math.max(0, 14 - Math.floor(ms / 86400000));
+}
+
+function updatePrintCount() {
+  const n = state.selected.size;
+  $('#h-count').textContent = n;
+  $('#h-print').disabled = n === 0;
+  const all = [...document.querySelectorAll('#h-list .h-check')];
+  const checked = all.filter((c) => c.checked);
+  const hAll = $('#h-all');
+  if (hAll) {
+    hAll.checked = all.length > 0 && checked.length === all.length;
+    hAll.indeterminate = checked.length > 0 && checked.length < all.length;
+  }
+}
+
+async function printSelected() {
+  // พิมพ์ 1 ใบก็ได้ หลายใบก็ได้ — ใบละ 1 หน้า A4 ใช้ snapshot ของแต่ละใบตรงๆ
+  const ids = [...state.selected];
+  if (!ids.length) return flash($('#h-msg'), 'กรุณาติ๊กเลือกอย่างน้อย 1 ใบก่อนพิมพ์', 'err');
+  const btn = $('#h-print');
+  btn.disabled = true;
+  try {
+    const rows = [];
+    for (const id of ids) rows.push(await api('certificates/' + id));
+    $('#batch-print').innerHTML = rows.map((row) =>
+      '<div class="doc batch-doc">' + docHTML({ ...row, items: JSON.parse(row.items_json || '[]') }) + '</div>'
+    ).join('');
+    document.body.classList.add('batch-printing');
+    window.print();
+  } catch (e) {
+    flash($('#h-msg'), e.message, 'err');
+  } finally {
+    btn.disabled = false;
+  }
+}
+// หลังพิมพ์เสร็จ (ทั้งพิมพ์รวมและพิมพ์เดี่ยว) ถอดโหมดพิมพ์รวมทิ้ง — ไม่งั้นรอบหน้าจะได้กระดาษเปล่า/ผิดโหมด
+window.addEventListener('afterprint', () => document.body.classList.remove('batch-printing'));
+
+async function loadHistory() {
+  const list = await api('certificates?' + historyParams());
+  // ใบที่ถูกลบ/หายไปแล้วต้องหลุดจากที่เลือกด้วย ไม่งั้นตัวนับค้าง
+  const ids = new Set(list.map((r) => r.id));
+  [...state.selected].forEach((id) => { if (!ids.has(id)) state.selected.delete(id); });
   $('#h-empty').hidden = list.length > 0;
   $('#h-list').innerHTML = list.map((r) => {
     const dt = thaiDate(r.doc_date);
+    const checked = state.selected.has(r.id) ? ' checked' : '';
     return '<tr class="click" data-id="' + r.id + '">' +
+      '<td><input type="checkbox" class="h-check" data-id="' + r.id + '"' + checked + '></td>' +
       '<td data-label="เลขที่">' + esc(r.doc_no) +
         (r.updated_at ? ' <span class="muted" title="แก้ไขล่าสุด ' + esc(fmtStamp(r.updated_at)) + '">✎</span>' : '') +
       '</td>' +
@@ -744,8 +826,19 @@ async function loadHistory() {
       '<td data-label="ผู้รับเงิน">' + esc(r.payee_name) + '</td>' +
       '<td class="num" data-label="จำนวนเงิน">' + money(r.total_satang) + '</td>' +
       '<td><button class="btn" data-open="' + r.id + '">เปิด</button> ' +
-          '<button class="btn" data-edit-cert="' + r.id + '">แก้ไข</button></td></tr>';
+          '<button class="btn" data-edit-cert="' + r.id + '">แก้ไข</button> ' +
+          '<button class="btn danger" data-del-cert="' + r.id + '">ลบ</button></td></tr>';
   }).join('');
+  // ติ๊กเลือก — ต้อง stopPropagation ไม่งั้นจะกลายเป็นคลิกแถวแล้วเปิดใบแทน
+  $('#h-list').querySelectorAll('.h-check').forEach((c) => {
+    c.onclick = (ev) => ev.stopPropagation();
+    c.onchange = () => {
+      const id = +c.dataset.id;
+      if (c.checked) state.selected.add(id); else state.selected.delete(id);
+      updatePrintCount();
+    };
+  });
+  updatePrintCount();
   $('#h-list').querySelectorAll('[data-open]').forEach((b) => {
     b.onclick = async (ev) => {
       ev.stopPropagation();
@@ -758,12 +851,102 @@ async function loadHistory() {
       loadCertificate(await api('certificates/' + b.dataset.editCert), true);
     };
   });
+  // ลบ = ย้ายลงถังขยะก่อน (กู้คืนได้ 14 วัน) — กด 2 ครั้งเพื่อยืนยัน เลี่ยง confirm() ที่บล็อกทั้งหน้า
+  $('#h-list').querySelectorAll('[data-del-cert]').forEach((b) => {
+    b.onclick = async (ev) => {
+      ev.stopPropagation();
+      if (b.dataset.armed !== '1') {
+        b.dataset.armed = '1'; b.textContent = 'กดอีกครั้งเพื่อลบ';
+        setTimeout(() => { b.dataset.armed = '0'; b.textContent = 'ลบ'; }, 4000);
+        return;
+      }
+      b.disabled = true;
+      try {
+        await api('certificates/' + b.dataset.delCert, { method: 'DELETE' });
+        state.selected.delete(+b.dataset.delCert);
+        flash($('#h-msg'), 'ย้ายลงถังขยะแล้ว กู้คืนได้ภายใน 14 วัน', 'ok');
+        loadHistory(); loadTrash();
+      } catch (e) {
+        flash($('#h-msg'), e.message, 'err');
+        b.disabled = false;
+      }
+    };
+  });
   $('#h-list').querySelectorAll('tr.click').forEach((tr) => {
     tr.onclick = async () => loadCertificate(await api('certificates/' + tr.dataset.id), false);
   });
 }
+
+async function loadTrash() {
+  const list = await api('certificates?' + historyParams({ trash: '1' }));
+  $('#t-empty').hidden = list.length > 0;
+  $('#t-list').innerHTML = list.map((r) => {
+    const left = trashLeft(r.deleted_at);
+    const leftText = left <= 0 ? 'ลบถาวรวันนี้' : 'อีก ' + left + ' วัน';
+    return '<tr>' +
+      '<td data-label="เลขที่">' + esc(r.doc_no) + '</td>' +
+      '<td data-label="วันที่ลบ">' + esc(fmtStamp(r.deleted_at)) + '</td>' +
+      '<td data-label="คงเหลือ">' + esc(leftText) + '</td>' +
+      '<td data-label="บริษัท">' + esc(r.company_name) + '</td>' +
+      '<td class="num" data-label="จำนวนเงิน">' + money(r.total_satang) + '</td>' +
+      '<td><button class="btn" data-view-trash="' + r.id + '">เปิดดู</button> ' +
+          '<button class="btn primary" data-restore="' + r.id + '">กู้คืน</button> ' +
+          '<button class="btn danger" data-purge="' + r.id + '">ลบถาวร</button></td></tr>';
+  }).join('');
+  $('#t-list').querySelectorAll('[data-view-trash]').forEach((b) => {
+    b.onclick = async () => loadCertificate(await api('certificates/' + b.dataset.viewTrash), false);
+  });
+  $('#t-list').querySelectorAll('[data-restore]').forEach((b) => {
+    b.onclick = async () => {
+      b.disabled = true;
+      try {
+        await api('certificates/' + b.dataset.restore + '/restore', { method: 'POST' });
+        flash($('#h-msg'), 'กู้คืนแล้ว กลับไปอยู่ในประวัติ', 'ok');
+        loadHistory(); loadTrash();
+      } catch (e) {
+        flash($('#h-msg'), e.message, 'err');
+        b.disabled = false;
+      }
+    };
+  });
+  // ลบถาวร = หายจริง กู้ไม่ได้ — กด 2 ครั้งเพื่อยืนยัน
+  $('#t-list').querySelectorAll('[data-purge]').forEach((b) => {
+    b.onclick = async () => {
+      if (b.dataset.armed !== '1') {
+        b.dataset.armed = '1'; b.textContent = 'กดอีกครั้งเพื่อลบถาวร';
+        setTimeout(() => { b.dataset.armed = '0'; b.textContent = 'ลบถาวร'; }, 4000);
+        return;
+      }
+      b.disabled = true;
+      try {
+        await api('certificates/' + b.dataset.purge + '?permanent=1', { method: 'DELETE' });
+        flash($('#h-msg'), 'ลบถาวรแล้ว กู้คืนไม่ได้', 'ok');
+        loadTrash();
+      } catch (e) {
+        flash($('#h-msg'), e.message, 'err');
+        b.disabled = false;
+      }
+    };
+  });
+}
+$('#h-all').onchange = () => {
+  const on = $('#h-all').checked;
+  document.querySelectorAll('#h-list .h-check').forEach((c) => {
+    c.checked = on;
+    const id = +c.dataset.id;
+    if (on) state.selected.add(id); else state.selected.delete(id);
+  });
+  updatePrintCount();
+};
+$('#h-clear').onclick = () => {
+  state.selected.clear();
+  document.querySelectorAll('#h-list .h-check').forEach((c) => { c.checked = false; });
+  updatePrintCount();
+};
+$('#h-print').onclick = printSelected;
+updatePrintCount();
 ['#h-q','#h-company','#h-from','#h-to'].forEach((s) => {
-  $(s).oninput = () => { clearTimeout(historyTimer); historyTimer = setTimeout(loadHistory, 250); };
+  $(s).oninput = () => { clearTimeout(historyTimer); historyTimer = setTimeout(() => { loadHistory(); loadTrash(); }, 250); };
 });
 
 /* ---------------- เริ่มทำงาน ---------------- */

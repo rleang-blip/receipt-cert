@@ -47,13 +47,25 @@ export default {
       return json({ error: String((e && e.message) || e) }, 500);
     }
   },
+  // cron ล้างถังขยะทุกวัน — กันเคสไม่มีคนเปิดแอปเลย 14 วัน (ปกติ GET ก็ purge แบบ lazy อยู่แล้ว)
+  async scheduled(event, env) {
+    await purgeExpired(env.DB);
+  },
 };
 
+// ลบถาวรใบที่อยู่ในถังขยะครบ 14 วัน (deleted_at เก็บเป็น ISO UTC)
+async function purgeExpired(DB) {
+  await DB.prepare(
+    `DELETE FROM certificates WHERE deleted_at IS NOT NULL AND deleted_at <= datetime('now', '-14 days')`
+  ).run();
+}
+
 async function api(request, env, url) {
-  const [, resource, id] = url.pathname.split('/').filter(Boolean);
+  const parts = url.pathname.split('/').filter(Boolean); // ['api', resource, id, action]
+  const [, resource, id, action] = parts;
   const q = url.searchParams;
   const DB = env.DB;
-  const route = `${request.method} ${resource}${id ? '/:id' : ''}`;
+  const route = `${request.method} ${resource}${id ? '/:id' : ''}${action ? '/' + action : ''}`;
 
   switch (route) {
     /* ---------- บริษัท ---------- */
@@ -103,7 +115,8 @@ async function api(request, env, url) {
       if (!col) return bad('field ไม่ถูกต้อง');
       const { results } = await DB.prepare(
         `SELECT DISTINCT ${col} AS v FROM certificates
-         WHERE ${col} IS NOT NULL AND ${col} <> '' AND ${col} LIKE ?1
+         WHERE deleted_at IS NULL
+           AND ${col} IS NOT NULL AND ${col} <> '' AND ${col} LIKE ?1
          ORDER BY v LIMIT 50`
       ).bind(`%${q.get('q') || ''}%`).all();
       return json(results.map((r) => r.v));
@@ -112,28 +125,81 @@ async function api(request, env, url) {
     /* ---------- ใบรับรอง ---------- */
 
     case 'GET certificates': {
+      // ล้างใบที่ค้างถังขยะครบ 14 วันแบบ lazy ทุกครั้งที่เปิดประวัติ/ถังขยะ
+      // (มี cron scheduled() คอยล้างรายวันด้วย กันเคสไม่มีคนเปิดแอปเลย)
+      await purgeExpired(DB);
       const search = str(q.get('q'));
+      const companyId = +q.get('company_id') || 0;
+      const from = str(q.get('from'));
+      const to = str(q.get('to'));
+      // ?trash=1 = ดูเฉพาะถังขยะ (เรียงตามวันที่ลบ) ไม่งั้นดูเฉพาะรายการปกติ
+      if (q.get('trash') === '1') {
+        // ponytail: LIMIT 200 ถ้าใบเกินพันค่อยใส่ pagination
+        const { results } = await DB.prepare(
+          `SELECT id, doc_no, doc_date, company_name, payer_name, payee_name,
+                  total_satang, updated_at, deleted_at
+           FROM certificates
+           WHERE deleted_at IS NOT NULL
+             AND (?1 = '' OR doc_no LIKE ?2 OR payer_name LIKE ?2 OR payee_name LIKE ?2)
+             AND (?3 = 0  OR company_id = ?3)
+             AND (?4 = '' OR doc_date >= ?4)
+             AND (?5 = '' OR doc_date <= ?5)
+           ORDER BY deleted_at DESC LIMIT 200`
+        ).bind(search, `%${search}%`, companyId, from, to).all();
+        return json(results);
+      }
       // ponytail: LIMIT 200 ถ้าใบเกินพันค่อยใส่ pagination
       const { results } = await DB.prepare(
         `SELECT id, doc_no, doc_date, company_name, payer_name, payee_name, total_satang, updated_at
          FROM certificates
-         WHERE (?1 = '' OR doc_no LIKE ?2 OR payer_name LIKE ?2 OR payee_name LIKE ?2)
+         WHERE deleted_at IS NULL
+           AND (?1 = '' OR doc_no LIKE ?2 OR payer_name LIKE ?2 OR payee_name LIKE ?2)
            AND (?3 = 0  OR company_id = ?3)
            AND (?4 = '' OR doc_date >= ?4)
            AND (?5 = '' OR doc_date <= ?5)
          ORDER BY id DESC LIMIT 200`
-      ).bind(search, `%${search}%`, +q.get('company_id') || 0, str(q.get('from')), str(q.get('to'))).all();
+      ).bind(search, `%${search}%`, companyId, from, to).all();
       return json(results);
     }
 
     case 'GET certificates/:id': {
+      // คืนใบแม้จะอยู่ในถังขยะ เพื่อให้เปิดดู/ยืนยันก่อนกู้คืนหรือลบถาวรได้
       const row = await DB.prepare(`SELECT * FROM certificates WHERE id=?1`).bind(+id).first();
       return row ? json(row) : json({ error: 'ไม่พบใบนี้' }, 404);
     }
 
     case 'DELETE certificates/:id': {
-      await DB.prepare(`DELETE FROM certificates WHERE id=?1`).bind(+id).run();
-      return json({ ok: true });
+      // ลบปกติ = ย้ายลงถังขยะ (soft delete) กู้คืนได้ใน 14 วัน
+      // ?permanent=1 = ลบถาวรทันที (ใช้จากในถังขยะเท่านั้น)
+      if (q.get('permanent') === '1') {
+        await DB.prepare(`DELETE FROM certificates WHERE id=?1`).bind(+id).run();
+        return json({ ok: true, permanent: true });
+      }
+      const now = new Date().toISOString();
+      const row = await DB.prepare(
+        `UPDATE certificates SET deleted_at=?2, updated_at=?2
+         WHERE id=?1 AND deleted_at IS NULL RETURNING id, deleted_at`
+      ).bind(+id, now).first();
+      if (!row) {
+        const exists = await DB.prepare(`SELECT id FROM certificates WHERE id=?1`).bind(+id).first();
+        if (!exists) return json({ error: 'ไม่พบใบนี้' }, 404);
+        return json({ ok: true, already: true });
+      }
+      return json({ ok: true, deleted_at: row.deleted_at });
+    }
+
+    case 'POST certificates/:id/restore': {
+      // กู้คืนจากถังขยะ — ถ้าครบ 14 วัน purge จะลบไปแล้ว จะเจอ 404 กู้ไม่ได้
+      await purgeExpired(DB);
+      const row = await DB.prepare(
+        `UPDATE certificates SET deleted_at=NULL WHERE id=?1 AND deleted_at IS NOT NULL RETURNING *`
+      ).bind(+id).first();
+      if (!row) {
+        const exists = await DB.prepare(`SELECT id, deleted_at FROM certificates WHERE id=?1`).bind(+id).first();
+        if (!exists) return json({ error: 'ไม่พบใบนี้ (อาจถูกลบถาวรหลังครบ 14 วันแล้ว)' }, 404);
+        return bad('ใบนี้ไม่ได้อยู่ในถังขยะ');
+      }
+      return json(row);
     }
 
     case 'POST certificates':
@@ -224,6 +290,7 @@ async function createCertificate(b, DB) {
 async function updateCertificate(id, b, DB) {
   const existing = await DB.prepare(`SELECT * FROM certificates WHERE id=?1`).bind(id).first();
   if (!existing) return json({ error: 'ไม่พบใบนี้' }, 404);
+  if (existing.deleted_at) return json({ error: 'ใบนี้อยู่ในถังขยะ กรุณากู้คืนก่อนแก้ไข' }, 400);
 
   const v = validateCertificate(b);
   if (v.error) return bad(v.error);
