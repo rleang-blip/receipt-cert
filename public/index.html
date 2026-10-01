@@ -314,6 +314,7 @@
       <h2 style="margin-top:0">ประวัติใบรับรอง</h2>
       <div class="actions">
         <button class="btn primary" id="h-print">พิมพ์ที่เลือก (<span id="h-count">0</span>)</button>
+        <button class="btn" id="h-export">Export CSV (<span id="h-count2">0</span>)</button>
         <button class="btn" id="h-clear">ล้างที่เลือก</button>
         <span class="muted">ติ๊กเลือก 1 ใบหรือหลายใบแล้วกดพิมพ์ ได้ใบละ 1 หน้า A4</span>
       </div>
@@ -777,7 +778,9 @@ function trashLeft(deleted_at) {
 function updatePrintCount() {
   const n = state.selected.size;
   $('#h-count').textContent = n;
+  $('#h-count2').textContent = n;
   $('#h-print').disabled = n === 0;
+  $('#h-export').disabled = n === 0;
   const all = [...document.querySelectorAll('#h-list .h-check')];
   const checked = all.filter((c) => c.checked);
   const hAll = $('#h-all');
@@ -809,6 +812,48 @@ async function printSelected() {
 }
 // หลังพิมพ์เสร็จ (ทั้งพิมพ์รวมและพิมพ์เดี่ยว) ถอดโหมดพิมพ์รวมทิ้ง — ไม่งั้นรอบหน้าจะได้กระดาษเปล่า/ผิดโหมด
 window.addEventListener('afterprint', () => document.body.classList.remove('batch-printing'));
+
+// Export รายการที่ติ๊กไว้เป็น CSV (Excel เปิดได้) — คอลัมน์เดียวกับที่เห็นในประวัติ + รายละเอียดรายการ
+function csvCell(v) {
+  const s = String(v == null ? '' : v);
+  return /[",\n]/.test(s) ? '"' + s.replace(/"/g, '""') + '"' : s;
+}
+async function exportSelectedCSV() {
+  const ids = [...state.selected];
+  if (!ids.length) return flash($('#h-msg'), 'กรุณาติ๊กเลือกอย่างน้อย 1 ใบก่อน export', 'err');
+  const btn = $('#h-export');
+  btn.disabled = true;
+  try {
+    const rows = [];
+    for (const id of ids) rows.push(await api('certificates/' + id));
+    const head = ['เลขที่', 'วันที่', 'บริษัท', 'สาขา', 'ผู้จ่ายเงิน', 'ตำแหน่ง', 'ผู้รับเงิน',
+                  'รายการ', 'รวมเป็นเงิน (บาท)', 'หมายเหตุ'];
+    const lines = [head.map(csvCell).join(',')];
+    for (const r of rows) {
+      const items = JSON.parse(r.items_json || '[]');
+      const itemsText = items.map((it) => it.desc + ' ' + (it.amount_satang / 100).toFixed(2)).join('; ');
+      lines.push([
+        r.doc_no, r.doc_date, r.company_name, r.company_branch,
+        r.payer_name, r.payer_position, r.payee_name,
+        itemsText, (r.total_satang / 100).toFixed(2), r.note,
+      ].map(csvCell).join(','));
+    }
+    // BOM \uFEFF กันภาษาไทยเพี้ยนตอนเปิดใน Excel
+    const blob = new Blob(['\uFEFF' + lines.join('\r\n')], { type: 'text/csv;charset=utf-8' });
+    const a = document.createElement('a');
+    const stamp = new Date().toISOString().slice(0, 16).replace(/[-:T]/g, '');
+    a.href = URL.createObjectURL(blob);
+    a.download = 'receipts-' + stamp + '.csv';
+    document.body.appendChild(a);
+    a.click();
+    setTimeout(() => { URL.revokeObjectURL(a.href); a.remove(); }, 1000);
+    flash($('#h-msg'), 'export ' + rows.length + ' ใบแล้ว', 'ok');
+  } catch (e) {
+    flash($('#h-msg'), e.message, 'err');
+  } finally {
+    updatePrintCount();
+  }
+}
 
 // แถบแบ่งหน้า 10 รายการ/หน้า — โชว์ปุ่มเลขหน้าไม่เกิน 5 ปุ่มรอบหน้าปัจจุบัน
 function renderPager(elId, page, pages, total, go) {
@@ -978,6 +1023,7 @@ $('#h-clear').onclick = () => {
   updatePrintCount();
 };
 $('#h-print').onclick = printSelected;
+$('#h-export').onclick = exportSelectedCSV;
 updatePrintCount();
 ['#h-q','#h-company','#h-from','#h-to'].forEach((s) => {
   $(s).oninput = () => { clearTimeout(historyTimer); historyTimer = setTimeout(() => { state.hPage = 1; state.tPage = 1; loadHistory(); loadTrash(); }, 250); };
