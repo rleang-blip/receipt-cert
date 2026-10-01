@@ -322,6 +322,7 @@
         <tbody id="h-list"></tbody>
       </table>
       <p class="muted" id="h-empty" hidden>ไม่พบข้อมูล</p>
+      <div class="actions" id="h-pager"></div>
     </div>
     <div class="card">
       <h2 style="margin-top:0">ถังขยะ <span class="muted">— เก็บ 14 วัน กู้คืนได้</span></h2>
@@ -331,6 +332,7 @@
         <tbody id="t-list"></tbody>
       </table>
       <p class="muted" id="t-empty" hidden>ถังขยะว่าง</p>
+      <div class="actions" id="t-pager"></div>
     </div>
   </section>
 
@@ -382,7 +384,8 @@ function flash(el, text, kind) {
   if (text) el.scrollIntoView({ block: 'nearest' });
 }
 
-const state = { companies: [], saved: null, editing: false, editingCompany: null, selected: new Set() };
+const state = { companies: [], saved: null, editing: false, editingCompany: null, selected: new Set(), hPage: 1, tPage: 1 };
+const PAGE_SIZE = 10;
 
 /* ---------------- แท็บ ---------------- */
 document.querySelectorAll('.tabs button').forEach((b) => {
@@ -807,8 +810,36 @@ async function printSelected() {
 // หลังพิมพ์เสร็จ (ทั้งพิมพ์รวมและพิมพ์เดี่ยว) ถอดโหมดพิมพ์รวมทิ้ง — ไม่งั้นรอบหน้าจะได้กระดาษเปล่า/ผิดโหมด
 window.addEventListener('afterprint', () => document.body.classList.remove('batch-printing'));
 
+// แถบแบ่งหน้า 10 รายการ/หน้า — โชว์ปุ่มเลขหน้าไม่เกิน 5 ปุ่มรอบหน้าปัจจุบัน
+function renderPager(elId, page, pages, total, go) {
+  const el = $(elId);
+  if (!total) { el.innerHTML = ''; return; }
+  let nums = [];
+  for (let i = Math.max(1, page - 2); i <= Math.min(pages, page + 2); i++) nums.push(i);
+  el.innerHTML = '<span class="muted">ทั้งหมด ' + total + ' รายการ · หน้า ' + page + '/' + pages + '</span> ' +
+    '<button class="btn" data-pg="prev"' + (page <= 1 ? ' disabled' : '') + '>‹ ก่อนหน้า</button> ' +
+    nums.map((i) => '<button class="btn' + (i === page ? ' primary' : '') + '" data-pg="' + i + '">' + i + '</button>').join(' ') + ' ' +
+    '<button class="btn" data-pg="next"' + (page >= pages ? ' disabled' : '') + '>ถัดไป ›</button>';
+  el.querySelectorAll('[data-pg]').forEach((b) => {
+    b.onclick = () => {
+      const v = b.dataset.pg;
+      const next = v === 'prev' ? page - 1 : v === 'next' ? page + 1 : +v;
+      if (next >= 1 && next <= pages && next !== page) go(next);
+    };
+  });
+}
+
+// api คืน { items, total, page, pages } — รองรับ array เดิมเผื่อ server เก่า
+function unwrapPage(res) {
+  if (Array.isArray(res)) return { list: res, total: res.length, page: 1, pages: 1 };
+  return { list: res.items || [], total: res.total || 0, page: res.page || 1, pages: res.pages || 1 };
+}
+
 async function loadHistory() {
-  const list = await api('certificates?' + historyParams());
+  const res = await api('certificates?' + historyParams({ page: state.hPage, limit: PAGE_SIZE }));
+  const { list, total, page, pages } = unwrapPage(res);
+  state.hPage = page;
+  renderPager('#h-pager', page, pages, total, (n) => { state.hPage = n; loadHistory(); });
   // ใบที่ถูกลบ/หายไปแล้วต้องหลุดจากที่เลือกด้วย ไม่งั้นตัวนับค้าง
   const ids = new Set(list.map((r) => r.id));
   [...state.selected].forEach((id) => { if (!ids.has(id)) state.selected.delete(id); });
@@ -878,7 +909,10 @@ async function loadHistory() {
 }
 
 async function loadTrash() {
-  const list = await api('certificates?' + historyParams({ trash: '1' }));
+  const res = await api('certificates?' + historyParams({ trash: '1', page: state.tPage, limit: PAGE_SIZE }));
+  const { list, total, page, pages } = unwrapPage(res);
+  state.tPage = page;
+  renderPager('#t-pager', page, pages, total, (n) => { state.tPage = n; loadTrash(); });
   $('#t-empty').hidden = list.length > 0;
   $('#t-list').innerHTML = list.map((r) => {
     const left = trashLeft(r.deleted_at);
@@ -946,7 +980,7 @@ $('#h-clear').onclick = () => {
 $('#h-print').onclick = printSelected;
 updatePrintCount();
 ['#h-q','#h-company','#h-from','#h-to'].forEach((s) => {
-  $(s).oninput = () => { clearTimeout(historyTimer); historyTimer = setTimeout(() => { loadHistory(); loadTrash(); }, 250); };
+  $(s).oninput = () => { clearTimeout(historyTimer); historyTimer = setTimeout(() => { state.hPage = 1; state.tPage = 1; loadHistory(); loadTrash(); }, 250); };
 });
 
 /* ---------------- เริ่มทำงาน ---------------- */

@@ -132,34 +132,32 @@ async function api(request, env, url) {
       const companyId = +q.get('company_id') || 0;
       const from = str(q.get('from'));
       const to = str(q.get('to'));
-      // ?trash=1 = ดูเฉพาะถังขยะ (เรียงตามวันที่ลบ) ไม่งั้นดูเฉพาะรายการปกติ
-      if (q.get('trash') === '1') {
-        // ponytail: LIMIT 200 ถ้าใบเกินพันค่อยใส่ pagination
-        const { results } = await DB.prepare(
-          `SELECT id, doc_no, doc_date, company_name, payer_name, payee_name,
-                  total_satang, updated_at, deleted_at
-           FROM certificates
-           WHERE deleted_at IS NOT NULL
-             AND (?1 = '' OR doc_no LIKE ?2 OR payer_name LIKE ?2 OR payee_name LIKE ?2)
-             AND (?3 = 0  OR company_id = ?3)
-             AND (?4 = '' OR doc_date >= ?4)
-             AND (?5 = '' OR doc_date <= ?5)
-           ORDER BY deleted_at DESC LIMIT 200`
-        ).bind(search, `%${search}%`, companyId, from, to).all();
-        return json(results);
-      }
-      // ponytail: LIMIT 200 ถ้าใบเกินพันค่อยใส่ pagination
+      // แบ่งหน้า 10 รายการ/หน้า — ?trash=1 = ดูเฉพาะถังขยะ (เรียงตามวันที่ลบ) ไม่งั้นดูเฉพาะรายการปกติ
+      const page = Math.max(1, parseInt(q.get('page'), 10) || 1);
+      const limit = Math.min(50, Math.max(1, parseInt(q.get('limit'), 10) || 10));
+      const offset = (page - 1) * limit;
+      const isTrash = q.get('trash') === '1';
+      // สองค่านี้มาจาก boolean ภายในเท่านั้น ไม่ใช่ input ผู้ใช้โดยตรง — ต่อ string ลง SQL ได้ปลอดภัย
+      const delCond = isTrash ? 'deleted_at IS NOT NULL' : 'deleted_at IS NULL';
+      const orderBy = isTrash ? 'deleted_at DESC' : 'id DESC';
+      const cols = isTrash
+        ? 'id, doc_no, doc_date, company_name, payer_name, payee_name, total_satang, updated_at, deleted_at'
+        : 'id, doc_no, doc_date, company_name, payer_name, payee_name, total_satang, updated_at';
+      const where =
+        `${delCond}` +
+        " AND (?1 = '' OR doc_no LIKE ?2 OR payer_name LIKE ?2 OR payee_name LIKE ?2)" +
+        ' AND (?3 = 0  OR company_id = ?3)' +
+        " AND (?4 = '' OR doc_date >= ?4)" +
+        " AND (?5 = '' OR doc_date <= ?5)";
+      const like = `%${search}%`;
+      const cnt = await DB.prepare(
+        `SELECT COUNT(*) AS n FROM certificates WHERE ${where}`
+      ).bind(search, like, companyId, from, to).first();
+      const total = (cnt && cnt.n) || 0;
       const { results } = await DB.prepare(
-        `SELECT id, doc_no, doc_date, company_name, payer_name, payee_name, total_satang, updated_at
-         FROM certificates
-         WHERE deleted_at IS NULL
-           AND (?1 = '' OR doc_no LIKE ?2 OR payer_name LIKE ?2 OR payee_name LIKE ?2)
-           AND (?3 = 0  OR company_id = ?3)
-           AND (?4 = '' OR doc_date >= ?4)
-           AND (?5 = '' OR doc_date <= ?5)
-         ORDER BY id DESC LIMIT 200`
-      ).bind(search, `%${search}%`, companyId, from, to).all();
-      return json(results);
+        `SELECT ${cols} FROM certificates WHERE ${where} ORDER BY ${orderBy} LIMIT ?6 OFFSET ?7`
+      ).bind(search, like, companyId, from, to, limit, offset).all();
+      return json({ items: results, total, page, limit, pages: Math.max(1, Math.ceil(total / limit)) });
     }
 
     case 'GET certificates/:id': {
