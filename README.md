@@ -5,6 +5,20 @@
 
 [คู่มือการใช้งานสำหรับผู้ใช้](USER_GUIDE.md)
 
+## Retro Digital / Next.js
+
+หน้าเว็บใช้ Next.js / React โดยอ่าน HTML, styles และสคริปต์เดิมจาก `public/index.html` เพื่อรักษาดีไซน์ การใช้งาน และ A4 print; `public/retro.css` เป็นธีม Light/Dark เฉพาะหน้าจอ ฟอร์มยังใช้ DOM controller เดิม ไม่ใช่การเขียนฟอร์มใหม่ทั้งหมดเป็น React state
+
+- `npm run dev`: เปิด Next.js ที่ `127.0.0.1:3000` และ Worker + D1 ในเครื่องที่ `127.0.0.1:8787`
+- `npm run check`: ตรวจสคริปต์และคำอ่านเงิน 9 กรณี
+- `npm run build && npm start`: preview Next.js build คู่กับ Worker ในเครื่อง
+- `npm run build:cloudflare`: export หน้า React และ assets ไป `out/`
+- `npm run deploy`: build static export แล้ว deploy Worker/API เดิมพร้อม assets จาก `out/` บน `receipt.altitech.co.th`
+
+Production ใช้ API บนโดเมนเดียวกันและ D1 เดิม ไม่ต้องรัน Next.js server หรือเปิดพอร์ต 8787 บน production. Next.js rewrites ใช้เฉพาะ local dev/preview. ต้อง rebuild หลังแก้ HTML/CSS ก่อน preview build
+
+ใช้ Node.js 22 ขึ้นไป ฐานข้อมูล local ใหม่ไม่มีข้อมูล production. คง `DB`, `ASSETS`, Cloudflare Access และการปิด workers.dev/preview URLs ตามเดิม
+
 ## ติดตั้งครั้งแรก
 
 ```bash
@@ -17,10 +31,10 @@ npx wrangler d1 create receipt-db
 npm run db:local
 
 # 3) รันทดสอบในเครื่อง
-npm run dev          # -> http://localhost:8787
+npm run dev          # -> http://127.0.0.1:3000 (Next.js) + :8787 (local Worker)
 ```
 
-เปิด http://localhost:8787/test_baht เพื่อเช็คว่าคำอ่านจำนวนเงินถูกต้องครบ 9 เคส
+เปิด http://127.0.0.1:3000/test_baht เพื่อเช็คว่าคำอ่านจำนวนเงินถูกต้องครบ 9 เคส
 
 ## Deploy
 
