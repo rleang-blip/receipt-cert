@@ -4,10 +4,73 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>ใบรับรองแทนใบเสร็จรับเงิน</title>
+<script>
+const themeStorageKey = 'receipt-office-theme';
+document.documentElement.dataset.theme = 'dark';
+try {
+  if (localStorage.getItem(themeStorageKey) === 'light') document.documentElement.dataset.theme = 'light';
+} catch { /* Storage may be unavailable in private or embedded browsing. */ }
+</script>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Sarabun:wght@400;600;700&display=swap" rel="stylesheet">
 <style>
+/* OD-LAYOUT-PRIMITIVES v1 — structure only: display, flex/grid, overflow, wrapping, ratio, geometry.
+   Put this @layer first; product CSS outside the layer always wins. */
+@layer od-layout {
+  :where(.od-stack,.od-row,.od-row-top,.od-cluster,.od-grid,.od-field,.od-stat,.od-cell,.od-tile) > :where(*) { min-width: 0; }
+
+  /* containers */
+  .od-stack   { display: flex; flex-direction: column; gap: var(--od-gap, 8px); }
+  .od-row     { display: flex; align-items: center; gap: var(--od-gap, 8px); }
+  .od-row-top { display: flex; align-items: flex-start; gap: var(--od-gap, 8px); }
+  .od-cluster { display: flex; flex-wrap: wrap; align-items: center; gap: var(--od-gap, 8px); }
+  .od-fill    { flex: 1 1 0; min-width: 0; }
+  .od-fixed   { flex: none; }
+  .od-grid    { display: grid; gap: var(--od-gap, 12px); grid-template-columns: repeat(var(--od-cols, 3), minmax(0, 1fr)); }
+
+  /* stacked information: each piece is its own line — never sibling inline spans */
+  .od-stat, .od-field, .od-cell { display: grid; gap: var(--od-gap, 2px); }
+  :where(.od-stat,.od-field,.od-cell) > :where(*) { display: block; }
+  .od-tile { display: grid; grid-template-rows: auto 1fr; }
+  :where(.od-tile) > :where(*) { display: block; }
+
+  /* media keeps its intrinsic ratio by default; never a distorted or cropped
+     cover by accident. height:auto lets the ratio win over an <img height="…">
+     attribute. Cropping to a uniform box is an explicit opt-in: set --od-ratio
+     AND add .od-media-cover together (per the core rule, only where a crop is
+     deliberate — tile thumbs, decorative fills — never on full-frame content). */
+  .od-media { display: block; width: 100%; height: auto; aspect-ratio: var(--od-ratio, auto); }
+  .od-media-cover { object-fit: cover; }
+
+  /* functional inline SVG icons opt into bounded geometry; content SVGs keep their own */
+  .od-icon { display: inline-block; inline-size: var(--od-icon-size, 1em); block-size: var(--od-icon-size, 1em); flex: none; }
+
+  /* data text only — authored copy is rewritten to its budget instead */
+  .od-truncate { display: block; max-width: 100%; overflow: hidden; white-space: nowrap; text-overflow: ellipsis; }
+  .od-clamp-2, .od-clamp-3 { display: -webkit-box; -webkit-box-orient: vertical; overflow: hidden; overflow-wrap: anywhere; }
+  .od-clamp-2 { -webkit-line-clamp: 2; }
+  .od-clamp-3 { -webkit-line-clamp: 3; }
+  .od-lines-2 { min-height: calc(2 * 1.4em); }   /* block-level reservation for a shared baseline */
+  .od-nowrap  { white-space: nowrap; }           /* 数字+单位 · 价格+起 · 日期+星期 */
+  .od-keep    { word-break: keep-all; overflow-wrap: anywhere; } /* CJK labels break at spaces / <wbr> first */
+
+  /* screen skeleton (optional): bars take their own space, the middle scrolls — no padding guessed for chrome */
+  .od-screen { display: grid; grid-template-rows: auto minmax(0, 1fr) auto; height: 100%; }
+  .od-scroll { overflow-y: auto; overscroll-behavior: contain; min-height: 0; }
+
+  /* horizontal rail: the next item peeks at the edge; trailing room survives overflow */
+  .od-rail { display: flex; gap: var(--od-gap, 8px); overflow-x: auto; scroll-snap-type: x proximity; scrollbar-width: none;
+             padding-inline: var(--od-rail-pad, 16px); scroll-padding-inline: var(--od-rail-pad, 16px); }
+  .od-rail::-webkit-scrollbar { display: none; }
+  :where(.od-rail) > :where(*) { flex: none; scroll-snap-align: start; }
+  :where(.od-rail) > :where(:last-child) { margin-inline-end: var(--od-rail-pad, 16px); }
+
+  .od-spacer { flex: none; visibility: hidden; pointer-events: none; }
+  .od-touch  { min-width: 44px; min-height: 44px; }
+}
+/* /OD-LAYOUT-PRIMITIVES v1 */
+
   :root { --line:#d6d8dd; --ink:#1b1c1f; --muted:#6b6f76; --accent:#1c5fd6; --bg:#f4f5f7; }
   * { box-sizing: border-box; }
   body {
@@ -73,6 +136,7 @@
   th { font-size: 13px; color: var(--muted); font-weight: 600; }
   tbody tr.click { cursor: pointer; }
   tbody tr.click:hover { background: #eef3fd; }
+  #h-list td:last-child { white-space: nowrap; }
 
   .msg { padding: 10px 12px; border-radius: 6px; margin-bottom: 12px; }
   .msg.err { background: #fdeced; color: #97161d; }
@@ -164,185 +228,187 @@
     body.batch-printing .batch-doc:last-child { page-break-after: auto; }
   }
 </style>
+<link rel="stylesheet" href="retro.css">
 </head>
 <body>
 <div class="wrap">
+  <header class="masthead no-print od-row-top">
+    <div class="brand-mark od-fixed" aria-hidden="true">RC<span class="brand-cursor"></span></div>
+    <div class="od-field od-fill masthead-copy">
+      <p class="eyebrow">RECEIPT / OFFICE</p>
+      <h1>ใบรับรองแทนใบเสร็จรับเงิน</h1>
+      <p class="masthead-description">ออกเอกสาร จัดการบริษัท และค้นประวัติในที่เดียว</p>
+    </div>
+    <div class="header-tools od-row od-fixed">
+      <div class="format-stamp od-field">
+        <span class="eyebrow">DOCUMENT FORMAT</span>
+        <strong>A4 <span>/ PDF</span></strong>
+      </div>
+      <button type="button" id="theme-toggle" class="btn theme-toggle od-row" aria-label="โหมดสว่าง" aria-pressed="false" title="สลับโหมดสว่างและมืด">
+        <span class="theme-option theme-light" aria-hidden="true">Light</span>
+        <span class="theme-option theme-dark" aria-hidden="true">Dark</span>
+      </button>
+    </div>
+  </header>
 
-  <h1 class="no-print">ใบรับรองแทนใบเสร็จรับเงิน</h1>
-  <nav class="tabs no-print">
-    <button data-tab="new" class="on">ออกใบใหม่</button>
-    <button data-tab="companies">บริษัท</button>
-    <button data-tab="history">ประวัติ</button>
+  <nav class="tabs no-print" aria-label="เมนูหลัก">
+    <button type="button" data-tab="new" class="on od-row" aria-pressed="true" aria-controls="tab-new"><span class="nav-number" aria-hidden="true">01</span><span>ออกใบใหม่</span></button>
+    <button type="button" data-tab="companies" class="od-row" aria-pressed="false" aria-controls="tab-companies"><span class="nav-number" aria-hidden="true">02</span><span>บริษัท</span></button>
+    <button type="button" data-tab="history" class="od-row" aria-pressed="false" aria-controls="tab-history"><span class="nav-number" aria-hidden="true">03</span><span>ประวัติ</span></button>
   </nav>
 
-  <!-- ============ ออกใบใหม่ ============ -->
-  <section id="tab-new" class="tab on">
-    <div id="new-msg" class="no-print"></div>
-
+  <main>
+  <section id="tab-new" class="tab on" aria-labelledby="new-title">
+    <div class="workspace-head no-print od-row-top">
+      <div class="od-field od-fill"><h2 id="new-title">ออกใบรับรอง</h2><p>กรอกข้อมูล แล้วตรวจตัวอย่างเอกสารก่อนบันทึก</p></div>
+      <span class="workspace-tag od-fixed">NEW CERTIFICATE</span>
+    </div>
+    <div id="new-msg" class="no-print" role="status" aria-live="polite"></div>
     <div class="split">
-    <div class="pane-left no-print">
-    <div class="card">
-      <fieldset id="form">
-        <div class="grid">
-          <div>
-            <label for="f-company">บริษัท (พิมพ์เพื่อค้นหา)</label>
-            <input id="f-company" list="dl-companies" placeholder="พิมพ์ชื่อบริษัท…" autocomplete="off">
-            <datalist id="dl-companies"></datalist>
-          </div>
-          <div>
-            <label for="f-date">วันที่</label>
-            <input id="f-date" type="date">
-          </div>
-
-          <div>
-            <label for="f-docno">เลขที่เอกสาร</label>
-            <input id="f-docno" placeholder="ระบบออกเลขให้อัตโนมัติ (INS-2569/0001)" autocomplete="off">
-          </div>
-
-          <div>
-            <label for="f-payer">ข้าพเจ้า (ผู้เบิกจ่าย)</label>
-            <input id="f-payer" list="dl-payer" autocomplete="off">
-            <datalist id="dl-payer"></datalist>
-          </div>
-          <div>
-            <label for="f-position">ตำแหน่ง</label>
-            <input id="f-position" list="dl-position" autocomplete="off">
-            <datalist id="dl-position"></datalist>
-          </div>
-
-          <div>
-            <label for="f-payee">ผู้รับเงิน</label>
-            <input id="f-payee" list="dl-payee" autocomplete="off">
-            <datalist id="dl-payee"></datalist>
-          </div>
-          <div>
-            <label for="f-period-from">จ่ายตั้งแต่วันที่</label>
-            <input id="f-period-from" type="date">
-          </div>
-          <div>
-            <label for="f-period-to">ถึงวันที่</label>
-            <input id="f-period-to" type="date">
-          </div>
-
-          <div>
-            <label for="f-approver">ผู้อนุมัติ (เว้นว่างไว้เซ็นสดบนกระดาษได้)</label>
-            <input id="f-approver" list="dl-approver" autocomplete="off">
-            <datalist id="dl-approver"></datalist>
-          </div>
-          <div>
-            <label for="f-approver-position">ตำแหน่ง</label>
-            <input id="f-approver-position" list="dl-position" autocomplete="off">
+      <div class="pane-left no-print">
+        <div class="card form-card">
+          <fieldset id="form">
+            <div class="form-section">
+              <div class="section-label od-row"><span class="section-number" aria-hidden="true">01</span><h3>ข้อมูลเอกสาร</h3></div>
+              <div class="grid od-grid">
+                <div class="full od-field"><label for="f-company">บริษัท <span class="required">*</span></label><input id="f-company" list="dl-companies" placeholder="พิมพ์เพื่อค้นหาบริษัท…" autocomplete="off" required><datalist id="dl-companies"></datalist></div>
+                <div class="od-field"><label for="f-date">วันที่เอกสาร <span class="required">*</span></label><input id="f-date" type="date" required></div>
+                <div class="od-field"><label for="f-docno">เลขที่เอกสาร</label><input id="f-docno" placeholder="ออกเลขเมื่อบันทึก" autocomplete="off" aria-describedby="docno-help"></div>
+              </div>
+              <p class="field-help" id="docno-help">เลขที่เอกสารจะเรียงอัตโนมัติตามบริษัทและปี พ.ศ.</p>
+            </div>
+            <div class="form-section">
+              <div class="section-label od-row"><span class="section-number" aria-hidden="true">02</span><h3>ผู้เกี่ยวข้อง</h3></div>
+              <div class="grid od-grid">
+                <div class="od-field"><label for="f-payer">ผู้เบิกจ่าย <span class="required">*</span></label><input id="f-payer" list="dl-payer" autocomplete="off" required><datalist id="dl-payer"></datalist></div>
+                <div class="od-field"><label for="f-position">ตำแหน่งผู้เบิกจ่าย</label><input id="f-position" list="dl-position" autocomplete="off"><datalist id="dl-position"></datalist></div>
+                <div class="full od-field"><label for="f-payee">ผู้รับเงิน <span class="required">*</span></label><input id="f-payee" list="dl-payee" autocomplete="off" required><datalist id="dl-payee"></datalist></div>
+                <div class="od-field"><label for="f-period-from">จ่ายตั้งแต่วันที่</label><input id="f-period-from" type="date"></div>
+                <div class="od-field"><label for="f-period-to">ถึงวันที่</label><input id="f-period-to" type="date"></div>
+                <div class="od-field"><label for="f-approver">ผู้อนุมัติ</label><input id="f-approver" list="dl-approver" autocomplete="off" aria-describedby="approver-help"><datalist id="dl-approver"></datalist></div>
+                <div class="od-field"><label for="f-approver-position">ตำแหน่งผู้อนุมัติ</label><input id="f-approver-position" list="dl-position" autocomplete="off"></div>
+              </div>
+              <p class="field-help" id="approver-help">ผู้อนุมัติเว้นว่างไว้เพื่อลงชื่อบนกระดาษได้</p>
+            </div>
+            <div class="form-section">
+              <div class="section-label od-row"><span class="section-number" aria-hidden="true">03</span><h3>รายการที่จ่าย</h3></div>
+              <table class="items-table" aria-label="รายการที่จ่าย">
+                <colgroup><col><col style="width:144px"><col style="width:52px"></colgroup>
+                <tbody id="items"></tbody>
+              </table>
+              <div class="actions item-actions"><button type="button" class="btn" id="add-item">+ เพิ่มรายการ</button></div>
+              <div class="od-field"><label for="f-note">หมายเหตุ <span class="optional">(ไม่บังคับ)</span></label><input id="f-note" autocomplete="off"></div>
+            </div>
+          </fieldset>
+          <div class="total-strip od-row-top">
+            <div class="od-field od-fill"><span class="eyebrow">TOTAL AMOUNT</span><strong>รวมจำนวนเงิน</strong></div>
+            <div class="total-value od-nowrap"><output id="form-total">0.00</output> <span>บาท</span></div>
           </div>
         </div>
+        <div class="actions form-actions">
+          <button class="btn primary" id="save">บันทึกและพิมพ์ <span aria-hidden="true">↗</span></button>
+          <button class="btn primary" id="update" hidden>บันทึกการแก้ไข</button>
+          <button class="btn primary" id="edit" hidden>แก้ไขใบนี้</button>
+          <button class="btn" id="cancel-edit" hidden>ยกเลิกการแก้ไข</button>
+          <button class="btn" id="print">พิมพ์</button>
+          <button class="btn" id="reset">เริ่มใบใหม่</button>
+        </div>
+        <p class="form-footnote">ช่องที่มี <span class="required">*</span> จำเป็นต้องกรอกก่อนบันทึก</p>
+      </div>
+      <div class="pane-right">
+        <div class="preview-header no-print od-row">
+          <div class="od-field od-fill"><span class="eyebrow">DOCUMENT PREVIEW</span><h3>ตัวอย่างเอกสาร</h3></div>
+          <span class="paper-badge od-fixed">A4</span>
+        </div>
+        <button type="button" class="btn no-print" id="toggle-doc" aria-expanded="false" aria-controls="paper">ดูตัวอย่างเอกสาร</button>
+        <div id="paper"><div id="doc" class="doc"></div></div>
+        <div class="preview-footer no-print od-row-top"><span class="paper-size od-fixed">210 × 297 MM</span><p class="od-fill">ก่อนพิมพ์ ให้ปิดหัวกระดาษและท้ายกระดาษในหน้าต่าง Print</p></div>
+      </div>
+    </div>
+  </section>
 
-        <h2>รายการที่จ่าย</h2>
-        <table>
-          <thead><tr><th>รายการ</th><th style="width:120px">จำนวนเงิน (บาท)</th><th style="width:44px"></th></tr></thead>
-          <tbody id="items"></tbody>
+  <section id="tab-companies" class="tab no-print" aria-labelledby="companies-title">
+    <div class="workspace-head od-row-top"><div class="od-field od-fill"><h2 id="companies-title">จัดการบริษัท</h2><p>ข้อมูลบริษัทสำหรับออกใบรับรองและกำหนดรหัสเอกสาร</p></div><span class="workspace-tag od-fixed">COMPANY DIRECTORY</span></div>
+    <div id="co-msg" role="status" aria-live="polite"></div>
+    <div class="company-layout od-grid">
+      <div class="card company-editor">
+        <p class="eyebrow panel-eyebrow">COMPANY DETAILS</p>
+        <h2 id="co-form-title">เพิ่มบริษัท</h2>
+        <div class="grid od-grid">
+          <div class="od-field"><label for="c-code">รหัสบริษัท <span class="required">*</span></label><input id="c-code" maxlength="10" placeholder="เช่น INS" autocomplete="off" style="text-transform:uppercase" aria-describedby="company-code-help" required></div>
+          <div class="od-field"><label for="c-branch">สาขา</label><input id="c-branch" placeholder="สำนักงานใหญ่"></div>
+          <div class="full od-field"><label for="c-name">ชื่อบริษัท <span class="required">*</span></label><input id="c-name" required></div>
+          <div class="full od-field"><label for="c-address">ที่อยู่</label><input id="c-address"></div>
+          <div class="full od-field"><label for="c-tax">เลขประจำตัวผู้เสียภาษี</label><input id="c-tax" inputmode="numeric"></div>
+        </div>
+        <p class="field-help" id="company-code-help">รหัสใช้นำหน้าเลขที่เอกสาร เป็นอักษรอังกฤษหรือตัวเลข 2–10 ตัว และต้องไม่ซ้ำ</p>
+        <div class="actions"><button class="btn primary" id="c-save">บันทึกบริษัท</button><button class="btn" id="c-cancel" hidden>ยกเลิกการแก้ไข</button></div>
+      </div>
+      <div class="card company-directory">
+        <p class="eyebrow panel-eyebrow">COMPANY DIRECTORY</p><h2>รายชื่อบริษัท</h2>
+        <div class="od-field search-field"><label for="c-search">ค้นหาบริษัท</label><input id="c-search" placeholder="พิมพ์ชื่อบริษัท…" type="search"></div>
+        <table class="stack company-table" aria-label="รายชื่อบริษัท">
+          <thead><tr><th style="width:80px" scope="col">รหัส</th><th scope="col">ชื่อ</th><th scope="col">สาขา</th><th scope="col">เลขผู้เสียภาษี</th><th style="width:176px" scope="col">จัดการ</th></tr></thead>
+          <tbody id="co-list"></tbody>
         </table>
-        <div class="actions">
-          <button type="button" class="btn" id="add-item">+ เพิ่มรายการ</button>
-        </div>
-
-        <div>
-          <label for="f-note">หมายเหตุ (ไม่บังคับ)</label>
-          <input id="f-note" autocomplete="off">
-        </div>
-      </fieldset>
-    </div>
-
-    <div class="actions">
-      <button class="btn primary" id="save">บันทึกและพิมพ์</button>
-      <button class="btn primary" id="update" hidden>บันทึกการแก้ไข</button>
-      <button class="btn" id="edit" hidden>แก้ไขใบนี้</button>
-      <button class="btn" id="cancel-edit" hidden>ยกเลิกการแก้ไข</button>
-      <button class="btn" id="print">พิมพ์</button>
-      <button class="btn" id="reset">เริ่มใบใหม่</button>
-    </div>
-    </div><!-- /pane-left -->
-
-    <div class="pane-right">
-      <button type="button" class="btn no-print" id="toggle-doc">ดูตัวอย่างเอกสาร</button>
-      <div id="paper"><div id="doc" class="doc"></div></div>
-    </div>
-    </div><!-- /split -->
-  </section>
-
-  <!-- ============ บริษัท ============ -->
-  <section id="tab-companies" class="tab no-print">
-    <div id="co-msg"></div>
-    <div class="card">
-      <h2 style="margin-top:0" id="co-form-title">เพิ่มบริษัท</h2>
-      <div class="grid">
-        <div><label for="c-code">รหัสบริษัท * (นำหน้าเลขที่เอกสาร)</label>
-          <input id="c-code" maxlength="10" placeholder="INS" autocomplete="off"
-                 style="text-transform:uppercase"></div>
-        <div><label for="c-name">ชื่อบริษัท *</label><input id="c-name"></div>
-        <div><label for="c-branch">สาขา</label><input id="c-branch" placeholder="สำนักงานใหญ่"></div>
-        <div class="full"><label for="c-address">ที่อยู่</label><input id="c-address"></div>
-        <div><label for="c-tax">เลขประจำตัวผู้เสียภาษี</label><input id="c-tax"></div>
+        <p class="directory-note">ข้อมูลในใบรับรองที่บันทึกแล้วจะคงตามวันที่ออกเอกสาร</p>
       </div>
-      <div class="actions">
-        <button class="btn primary" id="c-save">บันทึก</button>
-        <button class="btn" id="c-cancel" hidden>ยกเลิกการแก้ไข</button>
-      </div>
-    </div>
-
-    <div class="card">
-      <label for="c-search">ค้นหาบริษัท</label>
-      <input id="c-search" placeholder="พิมพ์ชื่อบริษัท…">
-      <table class="stack" style="margin-top:12px">
-        <thead><tr><th style="width:80px">รหัส</th><th>ชื่อ</th><th>สาขา</th><th>เลขผู้เสียภาษี</th><th style="width:120px"></th></tr></thead>
-        <tbody id="co-list"></tbody>
-      </table>
     </div>
   </section>
 
-  <!-- ============ ประวัติ ============ -->
-  <section id="tab-history" class="tab no-print">
-    <div id="h-msg"></div>
-    <div class="card">
-      <div class="grid">
-        <div class="full"><label for="h-q">ค้นหา (เลขที่ / ผู้จ่าย / ผู้รับ)</label><input id="h-q"></div>
-        <div><label for="h-company">บริษัท</label><select id="h-company"><option value="">— ทุกบริษัท —</option></select></div>
-        <div></div>
-        <div><label for="h-from">ตั้งแต่วันที่</label><input id="h-from" type="date"></div>
-        <div><label for="h-to">ถึงวันที่</label><input id="h-to" type="date"></div>
+  <section id="tab-history" class="tab no-print" aria-labelledby="history-title">
+    <div class="workspace-head od-row-top"><div class="od-field od-fill"><h2 id="history-title">ประวัติใบรับรอง</h2><p>ค้นหา เปิดดู แก้ไข และพิมพ์เอกสารที่บันทึกไว้</p></div><span class="workspace-tag od-fixed">DOCUMENT ARCHIVE</span></div>
+    <div id="h-msg" role="status" aria-live="polite"></div>
+    <div class="card filter-card">
+      <div class="grid od-grid history-filters">
+        <div class="od-field"><label for="h-q">ค้นหาใบรับรอง</label><input id="h-q" type="search" placeholder="เลขที่เอกสาร / ผู้จ่าย / ผู้รับ"></div>
+        <div class="od-field"><label for="h-company">บริษัท</label><select id="h-company"><option value="">— ทุกบริษัท —</option></select></div>
+        <div class="od-field"><label for="h-from">ตั้งแต่วันที่</label><input id="h-from" type="date"></div>
+        <div class="od-field"><label for="h-to">ถึงวันที่</label><input id="h-to" type="date"></div>
       </div>
     </div>
-    <div class="card">
-      <h2 style="margin-top:0">ประวัติใบรับรอง</h2>
-      <div class="actions">
+    <div class="card archive-card">
+      <div class="panel-title od-row"><h3 class="od-fill">รายการเอกสาร</h3><span class="eyebrow od-fixed">SAVED DOCUMENTS</span></div>
+      <div class="actions archive-actions">
         <button class="btn primary" id="h-print">พิมพ์ที่เลือก (<span id="h-count">0</span>)</button>
-        <button class="btn" id="h-export">Export CSV (<span id="h-count2">0</span>)</button>
+        <button class="btn" id="h-export">ส่งออก CSV (<span id="h-count2">0</span>)</button>
         <button class="btn" id="h-clear">ล้างที่เลือก</button>
-        <span class="muted">ติ๊กเลือก 1 ใบหรือหลายใบแล้วกดพิมพ์ ได้ใบละ 1 หน้า A4</span>
+        <span class="muted selection-help">เลือกได้หลายใบ · พิมพ์ใบละ 1 หน้า A4</span>
       </div>
-      <table class="stack">
-        <thead><tr><th style="width:36px"><input type="checkbox" id="h-all" title="เลือกทั้งหมด"></th><th>เลขที่</th><th>วันที่</th><th>บริษัท</th><th>ผู้รับเงิน</th><th class="num">จำนวนเงิน</th><th style="width:210px"></th></tr></thead>
+      <table class="stack history-table" aria-label="ประวัติใบรับรอง">
+        <thead><tr><th style="width:60px" scope="col"><input type="checkbox" id="h-all" aria-label="เลือกเอกสารทั้งหมดในหน้านี้" title="เลือกทั้งหมด"></th><th scope="col">เลขที่</th><th scope="col">วันที่</th><th scope="col">บริษัท</th><th scope="col">ผู้รับเงิน</th><th class="num" scope="col">จำนวนเงิน</th><th style="width:264px" scope="col">จัดการ</th></tr></thead>
         <tbody id="h-list"></tbody>
       </table>
-      <p class="muted" id="h-empty" hidden>ไม่พบข้อมูล</p>
-      <div class="actions" id="h-pager"></div>
+      <p class="empty-state" id="h-empty" hidden>ไม่พบใบรับรองตามเงื่อนไข ลองเปลี่ยนคำค้น บริษัท หรือช่วงวันที่</p>
+      <div class="actions pager" id="h-pager"></div>
     </div>
-    <div class="card">
-      <h2 style="margin-top:0">ถังขยะ <span class="muted">— เก็บ 14 วัน กู้คืนได้</span></h2>
-      <p class="muted">กดลบ = ย้ายลงถังขยะก่อน ครบ 14 วันระบบจะลบถาวรอัตโนมัติและกู้คืนไม่ได้</p>
-      <table class="stack">
-        <thead><tr><th>เลขที่</th><th>วันที่ลบ</th><th>คงเหลือ</th><th>บริษัท</th><th class="num">จำนวนเงิน</th><th style="width:230px"></th></tr></thead>
+    <div class="card trash-card">
+      <div class="panel-title od-row"><h3 class="od-fill">ถังขยะ</h3><span class="retention-tag od-fixed">กู้คืนได้ภายใน 14 วัน</span></div>
+      <p class="trash-description">เอกสารที่ลบจะอยู่ที่นี่ 14 วัน ก่อนถูกลบถาวรโดยอัตโนมัติ หลังจากนั้นจะกู้คืนไม่ได้</p>
+      <table class="stack trash-table" aria-label="เอกสารในถังขยะ">
+        <thead><tr><th scope="col">เลขที่</th><th scope="col">วันที่ลบ</th><th scope="col">คงเหลือ</th><th scope="col">บริษัท</th><th class="num" scope="col">จำนวนเงิน</th><th style="width:304px" scope="col">จัดการ</th></tr></thead>
         <tbody id="t-list"></tbody>
       </table>
-      <p class="muted" id="t-empty" hidden>ถังขยะว่าง</p>
-      <div class="actions" id="t-pager"></div>
+      <p class="empty-state" id="t-empty" hidden>ถังขยะว่าง ไม่มีเอกสารที่รอกู้คืน</p>
+      <div class="actions pager" id="t-pager"></div>
     </div>
   </section>
-
+  </main>
+  <footer class="page-footer no-print od-row-top"><span class="eyebrow od-fixed">RECEIPT / OFFICE</span><p class="od-fill">ตรวจสอบข้อมูลและจำนวนเงินให้ถูกต้องก่อนส่งเอกสารให้ฝ่ายบัญชี</p></footer>
 </div>
-
 <div id="batch-print"></div>
 
 <script src="baht.js"></script>
 <script>
+const themeToggle = document.getElementById('theme-toggle');
+themeToggle.setAttribute('aria-pressed', String(document.documentElement.dataset.theme === 'light'));
+themeToggle.addEventListener('click', () => {
+  const theme = document.documentElement.dataset.theme === 'light' ? 'dark' : 'light';
+  document.documentElement.dataset.theme = theme;
+  themeToggle.setAttribute('aria-pressed', String(theme === 'light'));
+  try { localStorage.setItem(themeStorageKey, theme); } catch { /* Switching still works without storage. */ }
+});
+
 const MONTHS = ['มกราคม','กุมภาพันธ์','มีนาคม','เมษายน','พฤษภาคม','มิถุนายน',
                 'กรกฎาคม','สิงหาคม','กันยายน','ตุลาคม','พฤศจิกายน','ธันวาคม'];
 const $ = (s) => document.querySelector(s);
@@ -391,7 +457,10 @@ const PAGE_SIZE = 10;
 /* ---------------- แท็บ ---------------- */
 document.querySelectorAll('.tabs button').forEach((b) => {
   b.onclick = () => {
-    document.querySelectorAll('.tabs button').forEach((x) => x.classList.toggle('on', x === b));
+    document.querySelectorAll('.tabs button').forEach((x) => {
+      x.classList.toggle('on', x === b);
+      x.setAttribute('aria-pressed', String(x === b));
+    });
     document.querySelectorAll('.tab').forEach((t) => t.classList.toggle('on', t.id === 'tab-' + b.dataset.tab));
     if (b.dataset.tab === 'new') fitDoc();
     if (b.dataset.tab === 'companies') loadCompanyList();
@@ -404,9 +473,9 @@ function goTab(name) { document.querySelector('.tabs button[data-tab="' + name +
 function addItemRow(desc, amountText) {
   const tr = document.createElement('tr');
   tr.innerHTML =
-    '<td><input class="i-desc" autocomplete="off"></td>' +
-    '<td><input class="i-amt num" inputmode="decimal" autocomplete="off"></td>' +
-    '<td><button type="button" class="btn danger i-del" title="ลบแถว">✕</button></td>';
+    '<td><label class="item-field od-field">รายการ<input class="i-desc" autocomplete="off"></label></td>' +
+    '<td><label class="item-field od-field">จำนวนเงิน (บาท)<input class="i-amt num" inputmode="decimal" autocomplete="off"></label></td>' +
+    '<td><button type="button" class="btn danger i-del" title="ลบรายการ" aria-label="ลบรายการ"><svg class="od-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="square" aria-hidden="true"><path d="M6 6l12 12M18 6L6 18"/></svg></button></td>';
   tr.querySelector('.i-desc').value = desc || '';
   tr.querySelector('.i-amt').value = amountText || '';
   tr.querySelector('.i-del').onclick = () => {
@@ -519,7 +588,9 @@ function docHTML(data) {
 }
 
 function renderDoc(data) {
-  $('#doc').innerHTML = docHTML(data || collect());
+  const d = data || collect();
+  $('#doc').innerHTML = docHTML(d);
+  $('#form-total').textContent = money(d.total_satang);
   fitDoc();
 }
 
@@ -535,6 +606,7 @@ function fitDoc() {
   paper.style.height = Math.ceil(h * scale) + 'px';
 }
 window.addEventListener('resize', fitDoc);
+document.fonts.ready.then(fitDoc);
 
 // มือถือ: พับตัวอย่างเอกสารไว้ กดดูเมื่อต้องการ
 // ต้องเรียก fitDoc() ทุกครั้งที่กาง เพราะตอนซ่อนอยู่ (#paper display:none) วัดความกว้างได้ 0
@@ -542,6 +614,7 @@ $('#toggle-doc').onclick = () => {
   const pane = document.querySelector('.pane-right');
   const shown = pane.classList.toggle('show-doc');
   $('#toggle-doc').textContent = shown ? 'ซ่อนตัวอย่าง' : 'ดูตัวอย่างเอกสาร';
+  $('#toggle-doc').setAttribute('aria-expanded', String(shown));
   if (shown) fitDoc();
 };
 
@@ -684,7 +757,7 @@ async function loadCompanyList() {
     '<td data-label="เลขผู้เสียภาษี">' + esc(c.tax_id) + '</td>' +
     '<td><button class="btn" data-edit="' + c.id + '">แก้ไข</button> ' +
         '<button class="btn danger" data-del="' + c.id + '">ลบ</button></td></tr>'
-  ).join('') || '<tr><td colspan="5" class="muted">ยังไม่มีบริษัท</td></tr>';
+  ).join('') || '<tr><td colspan="5" class="muted">ยังไม่มีบริษัท เพิ่มบริษัทจากแบบฟอร์มเพื่อเริ่มออกใบรับรอง</td></tr>';
 
   $('#co-list').querySelectorAll('[data-edit]').forEach((b) => {
     b.onclick = () => {
@@ -893,7 +966,7 @@ async function loadHistory() {
     const dt = thaiDate(r.doc_date);
     const checked = state.selected.has(r.id) ? ' checked' : '';
     return '<tr class="click" data-id="' + r.id + '">' +
-      '<td><input type="checkbox" class="h-check" data-id="' + r.id + '"' + checked + '></td>' +
+      '<td><input type="checkbox" class="h-check" aria-label="เลือกใบรับรอง" data-id="' + r.id + '"' + checked + '></td>' +
       '<td data-label="เลขที่">' + esc(r.doc_no) +
         (r.updated_at ? ' <span class="muted" title="แก้ไขล่าสุด ' + esc(fmtStamp(r.updated_at)) + '">✎</span>' : '') +
       '</td>' +

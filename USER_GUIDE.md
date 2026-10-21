@@ -1,6 +1,6 @@
 # คู่มือการใช้งานระบบใบรับรองแทนใบเสร็จรับเงิน
 
-เว็บไซต์: [https://receipt.sukanyayot.com](https://receipt.sukanyayot.com)
+เว็บไซต์: [https://receipt.altitech.co.th](https://receipt.altitech.co.th)
 
 คู่มือนี้ครอบคลุมการเพิ่มบริษัท ออกและพิมพ์ใบรับรอง ค้นหาเอกสารเก่า และแก้ไขข้อมูล
 

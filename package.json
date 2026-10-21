@@ -2,10 +2,15 @@
   "name": "receipt-cert",
   "private": true,
   "scripts": {
-    "dev": "wrangler dev",
-    "deploy": "wrangler deploy",
+    "dev": "node scripts/run.mjs",
+    "deploy": "npm run build:cloudflare && wrangler deploy",
     "db:local": "wrangler d1 migrations apply receipt-db --local",
-    "db:remote": "wrangler d1 migrations apply receipt-db --remote"
+    "db:remote": "wrangler d1 migrations apply receipt-db --remote",
+    "dev:worker": "wrangler dev --assets ./public",
+    "build": "next build",
+    "start": "node scripts/run.mjs --production",
+    "check": "node scripts/check.mjs",
+    "build:cloudflare": "NEXT_STATIC_EXPORT=1 next build"
   },
   "devDependencies": {
     "wrangler": "^4.0.0"
@@ -13,5 +18,10 @@
   "allowScripts": {
     "esbuild@0.28.1": true,
     "workerd@1.20260908.1": true
+  },
+  "dependencies": {
+    "next": "^16.4.2",
+    "react": "^19.3.1",
+    "react-dom": "^19.3.1"
   }
 }
