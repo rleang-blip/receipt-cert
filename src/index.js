@@ -53,8 +53,21 @@ export default {
   },
 };
 
+// ฐานข้อมูลที่ยังไม่ได้รัน migration 0007 จะไม่มีคอลัมน์ deleted_at
+// ตรวจแบบอ่านอย่างเดียวแล้ว cache ต่อ isolate (cache เฉพาะผล true เพื่อให้รู้ทันทีเมื่อรัน migration แล้ว)
+let trashReady = false;
+async function hasTrash(DB) {
+  if (trashReady) return true;
+  const row = await DB.prepare(
+    `SELECT 1 AS ok FROM pragma_table_info('certificates') WHERE name = 'deleted_at'`
+  ).first();
+  trashReady = !!row;
+  return trashReady;
+}
+
 // ลบถาวรใบที่อยู่ในถังขยะครบ 14 วัน (deleted_at เก็บเป็น ISO UTC)
 async function purgeExpired(DB) {
+  if (!(await hasTrash(DB))) return;
   await DB.prepare(
     `DELETE FROM certificates WHERE deleted_at IS NOT NULL AND deleted_at <= datetime('now', '-14 days')`
   ).run();
@@ -113,10 +126,11 @@ async function api(request, env, url) {
     case 'GET names': {
       const col = NAME_FIELDS[q.get('field')];
       if (!col) return bad('field ไม่ถูกต้อง');
+      const notDeleted = (await hasTrash(DB)) ? 'deleted_at IS NULL AND' : '';
       const { results } = await DB.prepare(
         `SELECT DISTINCT ${col} AS v FROM certificates
-         WHERE deleted_at IS NULL
-           AND ${col} IS NOT NULL AND ${col} <> '' AND ${col} LIKE ?1
+         WHERE ${notDeleted}
+           ${col} IS NOT NULL AND ${col} <> '' AND ${col} LIKE ?1
          ORDER BY v LIMIT 50`
       ).bind(`%${q.get('q') || ''}%`).all();
       return json(results.map((r) => r.v));
@@ -137,8 +151,11 @@ async function api(request, env, url) {
       const limit = Math.min(50, Math.max(1, parseInt(q.get('limit'), 10) || 10));
       const offset = (page - 1) * limit;
       const isTrash = q.get('trash') === '1';
+      const trashOk = await hasTrash(DB);
+      // ยังไม่มีคอลัมน์ deleted_at = ไม่มีใบในถังขยะ และทุกใบเป็นรายการปกติ
+      if (isTrash && !trashOk) return json({ items: [], total: 0, page, limit, pages: 1 });
       // สองค่านี้มาจาก boolean ภายในเท่านั้น ไม่ใช่ input ผู้ใช้โดยตรง — ต่อ string ลง SQL ได้ปลอดภัย
-      const delCond = isTrash ? 'deleted_at IS NOT NULL' : 'deleted_at IS NULL';
+      const delCond = !trashOk ? '1=1' : isTrash ? 'deleted_at IS NOT NULL' : 'deleted_at IS NULL';
       const orderBy = isTrash ? 'deleted_at DESC' : 'id DESC';
       const cols = isTrash
         ? 'id, doc_no, doc_date, company_name, payer_name, payee_name, total_satang, updated_at, deleted_at'
@@ -173,6 +190,8 @@ async function api(request, env, url) {
         await DB.prepare(`DELETE FROM certificates WHERE id=?1`).bind(+id).run();
         return json({ ok: true, permanent: true });
       }
+      // ไม่มีคอลัมน์ deleted_at = ย้ายลงถังขยะไม่ได้ — ปฏิเสธไว้ก่อน ไม่ลบข้อมูลจริง
+      if (!(await hasTrash(DB))) return bad('ยังใช้ถังขยะไม่ได้ เพราะฐานข้อมูลยังไม่ได้อัปเดต จึงยังลบใบนี้ไม่ได้');
       const now = new Date().toISOString();
       const row = await DB.prepare(
         `UPDATE certificates SET deleted_at=?2, updated_at=?2
@@ -188,6 +207,7 @@ async function api(request, env, url) {
 
     case 'POST certificates/:id/restore': {
       // กู้คืนจากถังขยะ — ถ้าครบ 14 วัน purge จะลบไปแล้ว จะเจอ 404 กู้ไม่ได้
+      if (!(await hasTrash(DB))) return bad('ใบนี้ไม่ได้อยู่ในถังขยะ');
       await purgeExpired(DB);
       const row = await DB.prepare(
         `UPDATE certificates SET deleted_at=NULL WHERE id=?1 AND deleted_at IS NOT NULL RETURNING *`
