@@ -6,9 +6,9 @@
 <title>ใบรับรองแทนใบเสร็จรับเงิน</title>
 <script>
 const themeStorageKey = 'receipt-office-theme';
-document.documentElement.dataset.theme = 'dark';
+document.documentElement.dataset.theme = 'light';
 try {
-  if (localStorage.getItem(themeStorageKey) === 'light') document.documentElement.dataset.theme = 'light';
+  if (localStorage.getItem(themeStorageKey) === 'dark') document.documentElement.dataset.theme = 'dark';
 } catch { /* Storage may be unavailable in private or embedded browsing. */ }
 </script>
 <link rel="preconnect" href="https://fonts.googleapis.com">
